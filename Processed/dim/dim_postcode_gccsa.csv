@@ -1,0 +1,625 @@
+postcode,region_group,gccsa_name,area_weight_sqkm,postcode_name
+2000,Greater Sydney,Greater Sydney,4.2871,2000
+2007,Greater Sydney,Greater Sydney,0.5588,2007
+2008,Greater Sydney,Greater Sydney,0.845,2008
+2009,Greater Sydney,Greater Sydney,0.9299000000000001,2009
+2010,Greater Sydney,Greater Sydney,2.1733,2010
+2011,Greater Sydney,Greater Sydney,1.4054,2011
+2015,Greater Sydney,Greater Sydney,4.2157,2015
+2016,Greater Sydney,Greater Sydney,1.1717,2016
+2017,Greater Sydney,Greater Sydney,1.9386,2017
+2018,Greater Sydney,Greater Sydney,3.9305,2018
+2019,Greater Sydney,Greater Sydney,7.3690999999999995,2019
+2020,Greater Sydney,Greater Sydney,11.9607,2020
+2021,Greater Sydney,Greater Sydney,5.7186,2021
+2022,Greater Sydney,Greater Sydney,1.9228,2022
+2023,Greater Sydney,Greater Sydney,2.3731,2023
+2024,Greater Sydney,Greater Sydney,1.9321,2024
+2025,Greater Sydney,Greater Sydney,1.2307,2025
+2026,Greater Sydney,Greater Sydney,3.6477,2026
+2027,Greater Sydney,Greater Sydney,1.3761,2027
+2028,Greater Sydney,Greater Sydney,0.7929,2028
+2029,Greater Sydney,Greater Sydney,2.5286,2029
+2030,Greater Sydney,Greater Sydney,4.6636,2030
+2031,Greater Sydney,Greater Sydney,6.094,2031
+2032,Greater Sydney,Greater Sydney,2.475,2032
+2033,Greater Sydney,Greater Sydney,2.6691,2033
+2034,Greater Sydney,Greater Sydney,3.0497,2034
+2035,Greater Sydney,Greater Sydney,8.1207,2035
+2036,Greater Sydney,Greater Sydney,15.7131,2036
+2037,Greater Sydney,Greater Sydney,2.1374,2037
+2038,Greater Sydney,Greater Sydney,1.4931,2038
+2039,Greater Sydney,Greater Sydney,1.8337,2039
+2040,Greater Sydney,Greater Sydney,4.7540000000000004,2040
+2041,Greater Sydney,Greater Sydney,2.4666,2041
+2042,Greater Sydney,Greater Sydney,2.0446,2042
+2043,Greater Sydney,Greater Sydney,0.8075,2043
+2044,Greater Sydney,Greater Sydney,3.8539,2044
+2045,Greater Sydney,Greater Sydney,2.3828,2045
+2046,Greater Sydney,Greater Sydney,6.0148,2046
+2047,Greater Sydney,Greater Sydney,2.3101,2047
+2048,Greater Sydney,Greater Sydney,1.218,2048
+2049,Greater Sydney,Greater Sydney,1.929,2049
+2050,Greater Sydney,Greater Sydney,1.5031,2050
+2060,Greater Sydney,Greater Sydney,2.6912,2060
+2061,Greater Sydney,Greater Sydney,0.6316,2061
+2062,Greater Sydney,Greater Sydney,1.5527,2062
+2063,Greater Sydney,Greater Sydney,2.7281,2063
+2064,Greater Sydney,Greater Sydney,2.5348,2064
+2065,Greater Sydney,Greater Sydney,5.6781,2065
+2066,Greater Sydney,Greater Sydney,9.5786,2066
+2067,Greater Sydney,Greater Sydney,5.8196,2067
+2068,Greater Sydney,Greater Sydney,5.6655,2068
+2069,Greater Sydney,Greater Sydney,7.5302,2069
+2070,Greater Sydney,Greater Sydney,7.4616999999999996,2070
+2071,Greater Sydney,Greater Sydney,7.8221,2071
+2072,Greater Sydney,Greater Sydney,3.7885,2072
+2073,Greater Sydney,Greater Sydney,10.2515,2073
+2074,Greater Sydney,Greater Sydney,22.0151,2074
+2075,Greater Sydney,Greater Sydney,17.7425,2075
+2076,Greater Sydney,Greater Sydney,15.8484,2076
+2077,Greater Sydney,Greater Sydney,22.8664,2077
+2079,Greater Sydney,Greater Sydney,11.0623,2079
+2080,Greater Sydney,Greater Sydney,10.5767,2080
+2081,Greater Sydney,Greater Sydney,40.1939,2081
+2082,Greater Sydney,Greater Sydney,9.6876,2082
+2083,Greater Sydney,Greater Sydney,45.774,2083
+2084,Greater Sydney,Greater Sydney,107.3731,2084
+2085,Greater Sydney,Greater Sydney,16.0513,2085
+2086,Greater Sydney,Greater Sydney,8.0742,2086
+2087,Greater Sydney,Greater Sydney,8.9311,2087
+2088,Greater Sydney,Greater Sydney,8.6503,2088
+2089,Greater Sydney,Greater Sydney,1.5036,2089
+2090,Greater Sydney,Greater Sydney,2.0654,2090
+2092,Greater Sydney,Greater Sydney,3.1079,2092
+2093,Greater Sydney,Greater Sydney,7.529,2093
+2094,Greater Sydney,Greater Sydney,1.1683,2094
+2095,Greater Sydney,Greater Sydney,5.5668,2095
+2096,Greater Sydney,Greater Sydney,3.4532,2096
+2097,Greater Sydney,Greater Sydney,4.7508,2097
+2099,Greater Sydney,Greater Sydney,18.7149,2099
+2100,Greater Sydney,Greater Sydney,13.4698,2100
+2101,Greater Sydney,Greater Sydney,26.6694,2101
+2102,Greater Sydney,Greater Sydney,4.136,2102
+2103,Greater Sydney,Greater Sydney,4.6646,2103
+2104,Greater Sydney,Greater Sydney,3.7163,2104
+2105,Greater Sydney,Greater Sydney,2.1888,2105
+2106,Greater Sydney,Greater Sydney,3.8119,2106
+2107,Greater Sydney,Greater Sydney,7.8756,2107
+2108,Greater Sydney,Greater Sydney,2.9542,2108
+2110,Greater Sydney,Greater Sydney,4.3304,2110
+2111,Greater Sydney,Greater Sydney,4.7162,2111
+2112,Greater Sydney,Greater Sydney,9.3018,2112
+2113,Greater Sydney,Greater Sydney,13.2159,2113
+2114,Greater Sydney,Greater Sydney,7.3639,2114
+2115,Greater Sydney,Greater Sydney,3.9347,2115
+2116,Greater Sydney,Greater Sydney,3.7975,2116
+2117,Greater Sydney,Greater Sydney,7.1268,2117
+2118,Greater Sydney,Greater Sydney,8.5068,2118
+2119,Greater Sydney,Greater Sydney,6.7407,2119
+2120,Greater Sydney,Greater Sydney,13.8137,2120
+2121,Greater Sydney,Greater Sydney,9.2015,2121
+2122,Greater Sydney,Greater Sydney,9.0576,2122
+2125,Greater Sydney,Greater Sydney,9.2916,2125
+2126,Greater Sydney,Greater Sydney,8.2603,2126
+2127,Greater Sydney,Greater Sydney,8.1408,2127
+2128,Greater Sydney,Greater Sydney,2.7,2128
+2130,Greater Sydney,Greater Sydney,1.2031,2130
+2131,Greater Sydney,Greater Sydney,3.4144,2131
+2132,Greater Sydney,Greater Sydney,2.4354,2132
+2133,Greater Sydney,Greater Sydney,2.5503,2133
+2134,Greater Sydney,Greater Sydney,2.4456,2134
+2135,Greater Sydney,Greater Sydney,6.5375,2135
+2136,Greater Sydney,Greater Sydney,3.4638,2136
+2137,Greater Sydney,Greater Sydney,7.3557,2137
+2138,Greater Sydney,Greater Sydney,3.7811,2138
+2140,Greater Sydney,Greater Sydney,3.7487,2140
+2141,Greater Sydney,Greater Sydney,11.9359,2141
+2142,Greater Sydney,Greater Sydney,10.9833,2142
+2143,Greater Sydney,Greater Sydney,4.3104000000000005,2143
+2144,Greater Sydney,Greater Sydney,8.5637,2144
+2145,Greater Sydney,Greater Sydney,27.5671,2145
+2146,Greater Sydney,Greater Sydney,6.0077,2146
+2147,Greater Sydney,Greater Sydney,15.997300000000001,2147
+2148,Greater Sydney,Greater Sydney,37.6817,2148
+2150,Greater Sydney,Greater Sydney,5.8687000000000005,2150
+2151,Greater Sydney,Greater Sydney,10.7334,2151
+2152,Greater Sydney,Greater Sydney,4.2857,2152
+2153,Greater Sydney,Greater Sydney,25.5852,2153
+2154,Greater Sydney,Greater Sydney,18.810200000000002,2154
+2155,Greater Sydney,Greater Sydney,36.388,2155
+2156,Greater Sydney,Greater Sydney,62.9548,2156
+2157,Greater Sydney,Greater Sydney,148.4858,2157
+2158,Greater Sydney,Greater Sydney,41.7948,2158
+2159,Greater Sydney,Greater Sydney,127.4464,2159
+2160,Greater Sydney,Greater Sydney,8.4346,2160
+2161,Greater Sydney,Greater Sydney,11.2122,2161
+2162,Greater Sydney,Greater Sydney,5.7908,2162
+2163,Greater Sydney,Greater Sydney,6.3533,2163
+2164,Greater Sydney,Greater Sydney,20.5159,2164
+2165,Greater Sydney,Greater Sydney,11.12,2165
+2166,Greater Sydney,Greater Sydney,15.2543,2166
+2167,Greater Sydney,Greater Sydney,6.9946,2167
+2168,Greater Sydney,Greater Sydney,12.8684,2168
+2170,Greater Sydney,Greater Sydney,54.319,2170
+2171,Greater Sydney,Greater Sydney,21.5331,2171
+2172,Greater Sydney,Greater Sydney,3.6787,2172
+2173,Greater Sydney,Greater Sydney,192.8683,2173
+2174,Greater Sydney,Greater Sydney,6.0563,2174
+2175,Greater Sydney,Greater Sydney,21.9683,2175
+2176,Greater Sydney,Greater Sydney,19.846799999999998,2176
+2177,Greater Sydney,Greater Sydney,5.1959,2177
+2178,Greater Sydney,Greater Sydney,54.3241,2178
+2179,Greater Sydney,Greater Sydney,36.53,2179
+2190,Greater Sydney,Greater Sydney,9.7772,2190
+2191,Greater Sydney,Greater Sydney,1.7826,2191
+2192,Greater Sydney,Greater Sydney,2.731,2192
+2193,Greater Sydney,Greater Sydney,4.1963,2193
+2194,Greater Sydney,Greater Sydney,3.3734,2194
+2195,Greater Sydney,Greater Sydney,3.5488,2195
+2196,Greater Sydney,Greater Sydney,7.0679,2196
+2197,Greater Sydney,Greater Sydney,2.9286,2197
+2198,Greater Sydney,Greater Sydney,3.3233,2198
+2199,Greater Sydney,Greater Sydney,4.6181,2199
+2200,Greater Sydney,Greater Sydney,13.9792,2200
+2203,Greater Sydney,Greater Sydney,2.0929,2203
+2204,Greater Sydney,Greater Sydney,5.7904,2204
+2205,Greater Sydney,Greater Sydney,4.244,2205
+2206,Greater Sydney,Greater Sydney,5.9786,2206
+2207,Greater Sydney,Greater Sydney,7.1852,2207
+2208,Greater Sydney,Greater Sydney,4.459,2208
+2209,Greater Sydney,Greater Sydney,4.2502,2209
+2210,Greater Sydney,Greater Sydney,11.0963,2210
+2211,Greater Sydney,Greater Sydney,7.3323,2211
+2212,Greater Sydney,Greater Sydney,6.4088,2212
+2213,Greater Sydney,Greater Sydney,10.036900000000001,2213
+2214,Greater Sydney,Greater Sydney,5.3711,2214
+2216,Greater Sydney,Greater Sydney,5.5962,2216
+2217,Greater Sydney,Greater Sydney,6.2487,2217
+2218,Greater Sydney,Greater Sydney,2.6615,2218
+2219,Greater Sydney,Greater Sydney,3.7807,2219
+2220,Greater Sydney,Greater Sydney,5.144,2220
+2221,Greater Sydney,Greater Sydney,5.3796,2221
+2222,Greater Sydney,Greater Sydney,2.5457,2222
+2223,Greater Sydney,Greater Sydney,7.253,2223
+2224,Greater Sydney,Greater Sydney,4.6882,2224
+2225,Greater Sydney,Greater Sydney,2.1022,2225
+2226,Greater Sydney,Greater Sydney,5.2222,2226
+2227,Greater Sydney,Greater Sydney,4.5976,2227
+2228,Greater Sydney,Greater Sydney,5.9464,2228
+2229,Greater Sydney,Greater Sydney,10.7805,2229
+2230,Greater Sydney,Greater Sydney,9.0449,2230
+2231,Greater Sydney,Greater Sydney,19.345399999999998,2231
+2232,Greater Sydney,Greater Sydney,153.5693,2232
+2233,Greater Sydney,Greater Sydney,40.831,2233
+2234,Greater Sydney,Greater Sydney,39.7248,2234
+2250,Greater Sydney,Greater Sydney,676.8614,2250
+2251,Greater Sydney,Greater Sydney,43.5444,2251
+2256,Greater Sydney,Greater Sydney,72.76480000000001,2256
+2257,Greater Sydney,Greater Sydney,29.3795,2257
+2258,Greater Sydney,Greater Sydney,121.2568,2258
+2259,Greater Sydney,Greater Sydney,465.9048,2259
+2260,Greater Sydney,Greater Sydney,23.6207,2260
+2261,Greater Sydney,Greater Sydney,51.4591,2261
+2262,Greater Sydney,Greater Sydney,33.7717,2262
+2263,Greater Sydney,Greater Sydney,22.3942,2263
+2264,Rest of NSW,Rest of NSW,115.1942,2264
+2265,Rest of NSW,Rest of NSW,136.0018,2265
+2267,Rest of NSW,Rest of NSW,3.6556,2267
+2278,Rest of NSW,Rest of NSW,45.0568,2278
+2280,Rest of NSW,Rest of NSW,27.927,2280
+2281,Rest of NSW,Rest of NSW,30.9078,2281
+2282,Rest of NSW,Rest of NSW,11.2261,2282
+2283,Rest of NSW,Rest of NSW,59.2496,2283
+2284,Rest of NSW,Rest of NSW,24.2726,2284
+2285,Rest of NSW,Rest of NSW,32.3918,2285
+2286,Rest of NSW,Rest of NSW,25.2353,2286
+2287,Rest of NSW,Rest of NSW,38.0741,2287
+2289,Rest of NSW,Rest of NSW,11.413,2289
+2290,Rest of NSW,Rest of NSW,35.6998,2290
+2291,Rest of NSW,Rest of NSW,7.1942,2291
+2292,Rest of NSW,Rest of NSW,2.873,2292
+2293,Rest of NSW,Rest of NSW,1.326,2293
+2294,Rest of NSW,Rest of NSW,2.0392,2294
+2295,Rest of NSW,Rest of NSW,11.9768,2295
+2296,Rest of NSW,Rest of NSW,0.7061999999999999,2296
+2297,Rest of NSW,Rest of NSW,0.8009999999999999,2297
+2298,Rest of NSW,Rest of NSW,4.0311,2298
+2299,Rest of NSW,Rest of NSW,5.2318999999999996,2299
+2300,Rest of NSW,Rest of NSW,3.4556999999999998,2300
+2302,Rest of NSW,Rest of NSW,0.8095,2302
+2303,Rest of NSW,Rest of NSW,3.0401,2303
+2304,Rest of NSW,Rest of NSW,39.3891,2304
+2305,Rest of NSW,Rest of NSW,8.894,2305
+2306,Rest of NSW,Rest of NSW,1.7770000000000001,2306
+2307,Rest of NSW,Rest of NSW,6.5582,2307
+2308,Rest of NSW,Rest of NSW,1.7907,2308
+2311,Rest of NSW,Rest of NSW,783.5898,2311
+2312,Rest of NSW,Rest of NSW,181.2071,2312
+2315,Rest of NSW,Rest of NSW,32.3446,2315
+2316,Rest of NSW,Rest of NSW,73.9271,2316
+2317,Rest of NSW,Rest of NSW,9.734,2317
+2318,Rest of NSW,Rest of NSW,259.5244,2318
+2319,Rest of NSW,Rest of NSW,29.6406,2319
+2320,Rest of NSW,Rest of NSW,403.8742,2320
+2321,Rest of NSW,Rest of NSW,361.6288,2321
+2322,Rest of NSW,Rest of NSW,168.2091,2322
+2323,Rest of NSW,Rest of NSW,207.9467,2323
+2324,Rest of NSW,Rest of NSW,627.1611,2324
+2325,Rest of NSW,Rest of NSW,1605.0648,2325
+2326,Rest of NSW,Rest of NSW,80.9068,2326
+2327,Rest of NSW,Rest of NSW,15.0694,2327
+2328,Rest of NSW,Rest of NSW,1634.8508,2328
+2329,Rest of NSW,Rest of NSW,3056.2045000000003,2329
+2330,Rest of NSW,Rest of NSW,4718.8359,2330
+2331,Rest of NSW,Rest of NSW,137.2978,2331
+2333,Rest of NSW,Rest of NSW,1691.3907,2333
+2334,Rest of NSW,Rest of NSW,20.7073,2334
+2335,Rest of NSW,Rest of NSW,268.4372,2335
+2336,Rest of NSW,Rest of NSW,888.9717,2336
+2337,Rest of NSW,Rest of NSW,3331.7268,2337
+2338,Rest of NSW,Rest of NSW,989.4775999999999,2338
+2339,Rest of NSW,Rest of NSW,1120.8458,2339
+2340,Rest of NSW,Rest of NSW,3352.9983,2340
+2341,Rest of NSW,Rest of NSW,227.9108,2341
+2342,Rest of NSW,Rest of NSW,561.0816,2342
+2343,Rest of NSW,Rest of NSW,3352.8926,2343
+2344,Rest of NSW,Rest of NSW,339.16740000000004,2344
+2345,Rest of NSW,Rest of NSW,291.7831,2345
+2346,Rest of NSW,Rest of NSW,1967.8028,2346
+2347,Rest of NSW,Rest of NSW,3035.4851,2347
+2350,Rest of NSW,Rest of NSW,4543.2274,2350
+2352,Rest of NSW,Rest of NSW,434.2708,2352
+2353,Rest of NSW,Rest of NSW,198.8995,2353
+2354,Rest of NSW,Rest of NSW,7142.1491000000005,2354
+2355,Rest of NSW,Rest of NSW,918.5516,2355
+2356,Rest of NSW,Rest of NSW,542.7306,2356
+2357,Rest of NSW,Rest of NSW,3305.5418,2357
+2358,Rest of NSW,Rest of NSW,1905.5433,2358
+2359,Rest of NSW,Rest of NSW,1294.1139,2359
+2360,Rest of NSW,Rest of NSW,3385.2978,2360
+2361,Rest of NSW,Rest of NSW,1963.1502,2361
+2365,Rest of NSW,Rest of NSW,3804.6687,2365
+2369,Rest of NSW,Rest of NSW,347.5058,2369
+2370,Rest of NSW,Rest of NSW,4769.4223,2370
+2371,Rest of NSW,Rest of NSW,1900.6028000000001,2371
+2372,Rest of NSW,Rest of NSW,4894.7861,2372
+2379,Rest of NSW,Rest of NSW,1114.41,2379
+2380,Rest of NSW,Rest of NSW,2089.1897,2380
+2381,Rest of NSW,Rest of NSW,2052.3174,2381
+2382,Rest of NSW,Rest of NSW,1826.3389,2382
+2386,Rest of NSW,Rest of NSW,1979.4028999999998,2386
+2387,Rest of NSW,Rest of NSW,1388.5195999999999,2387
+2388,Rest of NSW,Rest of NSW,6699.0871,2388
+2390,Rest of NSW,Rest of NSW,4217.1072,2390
+2395,Rest of NSW,Rest of NSW,1113.5695,2395
+2396,Rest of NSW,Rest of NSW,1826.7503,2396
+2397,Rest of NSW,Rest of NSW,1694.9079,2397
+2398,Rest of NSW,Rest of NSW,953.5519,2398
+2399,Rest of NSW,Rest of NSW,806.3754,2399
+2400,Rest of NSW,Rest of NSW,7569.0088000000005,2400
+2401,Rest of NSW,Rest of NSW,652.7933,2401
+2402,Rest of NSW,Rest of NSW,1631.0064,2402
+2403,Rest of NSW,Rest of NSW,1006.9407,2403
+2404,Rest of NSW,Rest of NSW,1992.4546,2404
+2405,Rest of NSW,Rest of NSW,3418.239,2405
+2406,Rest of NSW,Rest of NSW,2202.6515,2406
+2408,Rest of NSW,Rest of NSW,1561.154,2408
+2409,Rest of NSW,Rest of NSW,1607.1651,2409
+2410,Rest of NSW,Rest of NSW,1530.5927,2410
+2411,Rest of NSW,Rest of NSW,396.9284,2411
+2415,Rest of NSW,Rest of NSW,451.8325,2415
+2420,Rest of NSW,Rest of NSW,1023.5128,2420
+2421,Rest of NSW,Rest of NSW,244.7457,2421
+2422,Rest of NSW,Rest of NSW,3212.5916,2422
+2423,Rest of NSW,Rest of NSW,1346.2284,2423
+2424,Rest of NSW,Rest of NSW,881.6889,2424
+2425,Rest of NSW,Rest of NSW,518.0099,2425
+2426,Rest of NSW,Rest of NSW,71.33489999999999,2426
+2427,Rest of NSW,Rest of NSW,39.868199999999995,2427
+2428,Rest of NSW,Rest of NSW,320.9401,2428
+2429,Rest of NSW,Rest of NSW,1799.9008,2429
+2430,Rest of NSW,Rest of NSW,843.4816,2430
+2431,Rest of NSW,Rest of NSW,45.9673,2431
+2439,Rest of NSW,Rest of NSW,362.4229,2439
+2440,Rest of NSW,Rest of NSW,3604.2396,2440
+2441,Rest of NSW,Rest of NSW,992.7849,2441
+2443,Rest of NSW,Rest of NSW,312.5374,2443
+2444,Rest of NSW,Rest of NSW,222.4491,2444
+2445,Rest of NSW,Rest of NSW,76.81060000000001,2445
+2446,Rest of NSW,Rest of NSW,2233.1607,2446
+2447,Rest of NSW,Rest of NSW,566.6442,2447
+2448,Rest of NSW,Rest of NSW,115.0676,2448
+2449,Rest of NSW,Rest of NSW,570.7344,2449
+2450,Rest of NSW,Rest of NSW,1019.718,2450
+2452,Rest of NSW,Rest of NSW,12.7764,2452
+2453,Rest of NSW,Rest of NSW,2157.9951,2453
+2454,Rest of NSW,Rest of NSW,975.6046,2454
+2455,Rest of NSW,Rest of NSW,48.055099999999996,2455
+2456,Rest of NSW,Rest of NSW,205.4443,2456
+2460,Rest of NSW,Rest of NSW,6630.3495,2460
+2462,Rest of NSW,Rest of NSW,470.532,2462
+2463,Rest of NSW,Rest of NSW,549.2925,2463
+2464,Rest of NSW,Rest of NSW,102.8533,2464
+2465,Rest of NSW,Rest of NSW,23.5903,2465
+2466,Rest of NSW,Rest of NSW,14.3561,2466
+2469,Rest of NSW,Rest of NSW,3813.3747,2469
+2470,Rest of NSW,Rest of NSW,1256.5159,2470
+2471,Rest of NSW,Rest of NSW,442.1506,2471
+2472,Rest of NSW,Rest of NSW,466.4076,2472
+2473,Rest of NSW,Rest of NSW,31.366,2473
+2474,Rest of NSW,Rest of NSW,1537.5939,2474
+2475,Rest of NSW,Rest of NSW,494.7232,2475
+2476,Rest of NSW,Rest of NSW,805.3354,2476
+2477,Rest of NSW,Rest of NSW,227.642,2477
+2478,Rest of NSW,Rest of NSW,185.6804,2478
+2479,Rest of NSW,Rest of NSW,164.5709,2479
+2480,Rest of NSW,Rest of NSW,1369.4565,2480
+2481,Rest of NSW,Rest of NSW,131.029,2481
+2482,Rest of NSW,Rest of NSW,180.2681,2482
+2483,Rest of NSW,Rest of NSW,182.7314,2483
+2484,Rest of NSW,Rest of NSW,972.2983,2484
+2485,Rest of NSW,Rest of NSW,13.73,2485
+2486,Rest of NSW,Rest of NSW,100.3781,2486
+2487,Rest of NSW,Rest of NSW,66.6066,2487
+2488,Rest of NSW,Rest of NSW,13.626,2488
+2489,Rest of NSW,Rest of NSW,14.5419,2489
+2490,Rest of NSW,Rest of NSW,22.4375,2490
+2500,Rest of NSW,Rest of NSW,27.1582,2500
+2502,Rest of NSW,Rest of NSW,9.1601,2502
+2505,Rest of NSW,Rest of NSW,13.8266,2505
+2506,Rest of NSW,Rest of NSW,7.3206999999999995,2506
+2508,Rest of NSW,Rest of NSW,162.241,2508
+2515,Rest of NSW,Rest of NSW,14.2268,2515
+2516,Rest of NSW,Rest of NSW,8.6615,2516
+2517,Rest of NSW,Rest of NSW,9.0099,2517
+2518,Rest of NSW,Rest of NSW,12.7193,2518
+2519,Rest of NSW,Rest of NSW,9.2816,2519
+2525,Rest of NSW,Rest of NSW,8.5595,2525
+2526,Rest of NSW,Rest of NSW,132.2947,2526
+2527,Rest of NSW,Rest of NSW,96.0646,2527
+2528,Rest of NSW,Rest of NSW,11.2805,2528
+2529,Rest of NSW,Rest of NSW,40.451299999999996,2529
+2530,Rest of NSW,Rest of NSW,88.3672,2530
+2533,Rest of NSW,Rest of NSW,106.4039,2533
+2534,Rest of NSW,Rest of NSW,76.2287,2534
+2535,Rest of NSW,Rest of NSW,247.9753,2535
+2536,Rest of NSW,Rest of NSW,974.8377,2536
+2537,Rest of NSW,Rest of NSW,1167.0234,2537
+2538,Rest of NSW,Rest of NSW,390.494,2538
+2539,Rest of NSW,Rest of NSW,686.0289,2539
+2540,Rest of NSW,Rest of NSW,1833.4359,2540
+2541,Rest of NSW,Rest of NSW,45.432,2541
+2545,Rest of NSW,Rest of NSW,876.5468,2545
+2546,Rest of NSW,Rest of NSW,911.2673,2546
+2548,Rest of NSW,Rest of NSW,120.1179,2548
+2549,Rest of NSW,Rest of NSW,222.9511,2549
+2550,Rest of NSW,Rest of NSW,3966.6591,2550
+2551,Rest of NSW,Rest of NSW,1397.7681,2551
+2555,Greater Sydney,Greater Sydney,26.981,2555
+2556,Greater Sydney,Greater Sydney,40.2134,2556
+2557,Greater Sydney,Greater Sydney,37.1205,2557
+2558,Greater Sydney,Greater Sydney,7.6039,2558
+2559,Greater Sydney,Greater Sydney,4.3495,2559
+2560,Greater Sydney,Greater Sydney,206.6651,2560
+2563,Greater Sydney,Greater Sydney,11.5603,2563
+2564,Greater Sydney,Greater Sydney,9.0236,2564
+2565,Greater Sydney,Greater Sydney,29.7009,2565
+2566,Greater Sydney,Greater Sydney,28.3019,2566
+2567,Greater Sydney,Greater Sydney,31.1557,2567
+2568,Greater Sydney,Greater Sydney,34.0936,2568
+2569,Greater Sydney,Greater Sydney,26.770699999999998,2569
+2570,Greater Sydney,Greater Sydney,469.0775,2570
+2571,Greater Sydney,Greater Sydney,163.3952,2571
+2572,Greater Sydney,Greater Sydney,106.1734,2572
+2573,Greater Sydney,Greater Sydney,16.9784,2573
+2574,Rest of NSW,Rest of NSW,282.4595,2574
+2575,Rest of NSW,Rest of NSW,981.4743,2575
+2576,Rest of NSW,Rest of NSW,174.2442,2576
+2577,Rest of NSW,Rest of NSW,1312.519,2577
+2578,Rest of NSW,Rest of NSW,47.9223,2578
+2579,Rest of NSW,Rest of NSW,860.117,2579
+2580,Rest of NSW,Rest of NSW,5512.6655,2580
+2581,Rest of NSW,Rest of NSW,2106.6075,2581
+2582,Rest of NSW,Rest of NSW,3130.1184,2582
+2583,Rest of NSW,Rest of NSW,3382.6891,2583
+2584,Rest of NSW,Rest of NSW,281.3129,2584
+2585,Rest of NSW,Rest of NSW,260.132,2585
+2586,Rest of NSW,Rest of NSW,2323.2503,2586
+2587,Rest of NSW,Rest of NSW,921.8587,2587
+2588,Rest of NSW,Rest of NSW,218.0548,2588
+2590,Rest of NSW,Rest of NSW,1320.4637,2590
+2594,Rest of NSW,Rest of NSW,2418.7155,2594
+2611,Rest of NSW,Rest of NSW,994.9401,2611
+2618,Rest of NSW,Rest of NSW,197.0011,2618
+2619,Rest of NSW,Rest of NSW,11.3316,2619
+2620,Rest of NSW,Rest of NSW,1656.1435999999999,2620
+2621,Rest of NSW,Rest of NSW,853.2512,2621
+2622,Rest of NSW,Rest of NSW,4256.1145,2622
+2623,Rest of NSW,Rest of NSW,166.9084,2623
+2624,Rest of NSW,Rest of NSW,348.5647,2624
+2625,Rest of NSW,Rest of NSW,1.0856,2625
+2626,Rest of NSW,Rest of NSW,383.5704,2626
+2627,Rest of NSW,Rest of NSW,1994.6112,2627
+2628,Rest of NSW,Rest of NSW,2337.0094,2628
+2629,Rest of NSW,Rest of NSW,2054.5144,2629
+2630,Rest of NSW,Rest of NSW,4206.3548,2630
+2631,Rest of NSW,Rest of NSW,1199.4934,2631
+2632,Rest of NSW,Rest of NSW,1824.9879,2632
+2633,Rest of NSW,Rest of NSW,766.4927,2633
+2640,Rest of NSW,Rest of NSW,1029.4042,2640
+2641,Rest of NSW,Rest of NSW,33.5384,2641
+2642,Rest of NSW,Rest of NSW,4076.8,2642
+2643,Rest of NSW,Rest of NSW,156.4024,2643
+2644,Rest of NSW,Rest of NSW,2157.7365,2644
+2645,Rest of NSW,Rest of NSW,1181.6879,2645
+2646,Rest of NSW,Rest of NSW,2895.4549,2646
+2647,Rest of NSW,Rest of NSW,357.3501,2647
+2648,Rest of NSW,Rest of NSW,23909.7281,2648
+2649,Rest of NSW,Rest of NSW,247.113,2649
+2650,Rest of NSW,Rest of NSW,4061.238,2650
+2651,Rest of NSW,Rest of NSW,34.62,2651
+2652,Rest of NSW,Rest of NSW,6116.1137,2652
+2653,Rest of NSW,Rest of NSW,1228.8205,2653
+2655,Rest of NSW,Rest of NSW,427.2763,2655
+2656,Rest of NSW,Rest of NSW,1497.1368,2656
+2658,Rest of NSW,Rest of NSW,748.0545,2658
+2659,Rest of NSW,Rest of NSW,367.5445,2659
+2660,Rest of NSW,Rest of NSW,451.27930000000003,2660
+2661,Rest of NSW,Rest of NSW,14.7623,2661
+2663,Rest of NSW,Rest of NSW,492.6429,2663
+2665,Rest of NSW,Rest of NSW,4109.6274,2665
+2666,Rest of NSW,Rest of NSW,2462.5855,2666
+2668,Rest of NSW,Rest of NSW,708.1132,2668
+2669,Rest of NSW,Rest of NSW,6295.3460000000005,2669
+2671,Rest of NSW,Rest of NSW,3297.7351,2671
+2672,Rest of NSW,Rest of NSW,1794.2389,2672
+2675,Rest of NSW,Rest of NSW,8518.5583,2675
+2678,Rest of NSW,Rest of NSW,3.5099,2678
+2680,Rest of NSW,Rest of NSW,1894.4513,2680
+2681,Rest of NSW,Rest of NSW,471.7587,2681
+2700,Rest of NSW,Rest of NSW,3016.2983,2700
+2701,Rest of NSW,Rest of NSW,852.1158,2701
+2702,Rest of NSW,Rest of NSW,439.8686,2702
+2703,Rest of NSW,Rest of NSW,56.8879,2703
+2705,Rest of NSW,Rest of NSW,1129.1529,2705
+2706,Rest of NSW,Rest of NSW,725.4016,2706
+2707,Rest of NSW,Rest of NSW,2112.3439,2707
+2710,Rest of NSW,Rest of NSW,10466.1631,2710
+2711,Rest of NSW,Rest of NSW,24180.255,2711
+2712,Rest of NSW,Rest of NSW,966.5102,2712
+2713,Rest of NSW,Rest of NSW,970.31,2713
+2714,Rest of NSW,Rest of NSW,708.9706,2714
+2715,Rest of NSW,Rest of NSW,13749.9032,2715
+2716,Rest of NSW,Rest of NSW,2861.8271,2716
+2717,Rest of NSW,Rest of NSW,120.7928,2717
+2720,Rest of NSW,Rest of NSW,2485.6548,2720
+2721,Rest of NSW,Rest of NSW,539.5029,2721
+2722,Rest of NSW,Rest of NSW,1576.1373,2722
+2725,Rest of NSW,Rest of NSW,262.3734,2725
+2726,Rest of NSW,Rest of NSW,160.6689,2726
+2727,Rest of NSW,Rest of NSW,772.9227000000001,2727
+2729,Rest of NSW,Rest of NSW,933.1202,2729
+2730,Rest of NSW,Rest of NSW,420.4856,2730
+2731,Rest of NSW,Rest of NSW,1428.1661,2731
+2732,Rest of NSW,Rest of NSW,1849.8263,2732
+2733,Rest of NSW,Rest of NSW,2279.3516,2733
+2734,Rest of NSW,Rest of NSW,1755.2448,2734
+2735,Rest of NSW,Rest of NSW,271.5656,2735
+2736,Rest of NSW,Rest of NSW,213.1077,2736
+2737,Rest of NSW,Rest of NSW,3345.8754,2737
+2738,Rest of NSW,Rest of NSW,2066.8509999999997,2738
+2739,Rest of NSW,Rest of NSW,50.1706,2739
+2745,Greater Sydney,Greater Sydney,168.7608,2745
+2747,Greater Sydney,Greater Sydney,55.0667,2747
+2748,Greater Sydney,Greater Sydney,43.0734,2748
+2749,Greater Sydney,Greater Sydney,47.0936,2749
+2750,Greater Sydney,Greater Sydney,35.3705,2750
+2752,Greater Sydney,Greater Sydney,53.5688,2752
+2753,Greater Sydney,Greater Sydney,169.4419,2753
+2754,Greater Sydney,Greater Sydney,34.3251,2754
+2756,Greater Sydney,Greater Sydney,1486.8709,2756
+2757,Greater Sydney,Greater Sydney,8.3269,2757
+2758,Greater Sydney,Greater Sydney,572.1443,2758
+2759,Greater Sydney,Greater Sydney,15.5979,2759
+2760,Greater Sydney,Greater Sydney,19.9308,2760
+2761,Greater Sydney,Greater Sydney,14.7648,2761
+2762,Greater Sydney,Greater Sydney,12.5171,2762
+2763,Greater Sydney,Greater Sydney,13.0157,2763
+2765,Greater Sydney,Greater Sydney,127.5271,2765
+2766,Greater Sydney,Greater Sydney,27.238300000000002,2766
+2767,Greater Sydney,Greater Sydney,10.1088,2767
+2768,Greater Sydney,Greater Sydney,9.0194,2768
+2769,Greater Sydney,Greater Sydney,4.6533999999999995,2769
+2770,Greater Sydney,Greater Sydney,24.7303,2770
+2773,Greater Sydney,Greater Sydney,8.3936,2773
+2774,Greater Sydney,Greater Sydney,21.2999,2774
+2775,Greater Sydney,Greater Sydney,833.1402,2775
+2776,Greater Sydney,Greater Sydney,14.932,2776
+2777,Greater Sydney,Greater Sydney,54.7327,2777
+2778,Greater Sydney,Greater Sydney,20.9602,2778
+2779,Greater Sydney,Greater Sydney,12.4995,2779
+2780,Greater Sydney,Greater Sydney,38.460300000000004,2780
+2782,Greater Sydney,Greater Sydney,21.0358,2782
+2783,Greater Sydney,Greater Sydney,7.2886999999999995,2783
+2784,Greater Sydney,Greater Sydney,6.1389000000000005,2784
+2785,Greater Sydney,Greater Sydney,111.7873,2785
+2786,Greater Sydney,Greater Sydney,47.059,2786
+2787,Greater Sydney,Greater Sydney,2919.3554,2787
+2790,Rest of NSW,Rest of NSW,2481.3231,2790
+2791,Rest of NSW,Rest of NSW,184.9651,2791
+2792,Rest of NSW,Rest of NSW,369.6931,2792
+2793,Rest of NSW,Rest of NSW,648.0055,2793
+2794,Rest of NSW,Rest of NSW,1408.2658000000001,2794
+2795,Rest of NSW,Rest of NSW,5307.5248,2795
+2797,Rest of NSW,Rest of NSW,147.8245,2797
+2798,Rest of NSW,Rest of NSW,268.70889999999997,2798
+2799,Rest of NSW,Rest of NSW,630.7998,2799
+2800,Rest of NSW,Rest of NSW,1993.9511,2800
+2803,Rest of NSW,Rest of NSW,342.0982,2803
+2804,Rest of NSW,Rest of NSW,878.0498,2804
+2805,Rest of NSW,Rest of NSW,289.854,2805
+2806,Rest of NSW,Rest of NSW,519.6961,2806
+2807,Rest of NSW,Rest of NSW,299.7008,2807
+2808,Rest of NSW,Rest of NSW,242.5414,2808
+2809,Rest of NSW,Rest of NSW,163.0067,2809
+2810,Rest of NSW,Rest of NSW,2658.971,2810
+2817,Rest of NSW,Rest of NSW,961.4848,2817
+2818,Rest of NSW,Rest of NSW,471.7655,2818
+2820,Rest of NSW,Rest of NSW,2438.7509999999997,2820
+2821,Rest of NSW,Rest of NSW,2339.8603,2821
+2822,Rest of NSW,Rest of NSW,501.7243,2822
+2823,Rest of NSW,Rest of NSW,2782.3577,2823
+2824,Rest of NSW,Rest of NSW,4843.6,2824
+2825,Rest of NSW,Rest of NSW,7188.4073,2825
+2826,Rest of NSW,Rest of NSW,1153.7892,2826
+2827,Rest of NSW,Rest of NSW,2964.6885,2827
+2828,Rest of NSW,Rest of NSW,2375.64,2828
+2829,Rest of NSW,Rest of NSW,6318.8294,2829
+2830,Rest of NSW,Rest of NSW,3017.4938,2830
+2831,Rest of NSW,Rest of NSW,22389.3649,2831
+2832,Rest of NSW,Rest of NSW,9695.0643,2832
+2833,Rest of NSW,Rest of NSW,5044.6803,2833
+2834,Rest of NSW,Rest of NSW,2828.007,2834
+2835,Rest of NSW,Rest of NSW,29975.1826,2835
+2836,Rest of NSW,Rest of NSW,31517.8004,2836
+2838,Rest of NSW,Rest of NSW,3487.8165,2838
+2839,Rest of NSW,Rest of NSW,12282.839,2839
+2840,Rest of NSW,Rest of NSW,62474.6022,2840
+2842,Rest of NSW,Rest of NSW,1317.6706,2842
+2843,Rest of NSW,Rest of NSW,1590.9154,2843
+2844,Rest of NSW,Rest of NSW,1821.5658,2844
+2845,Rest of NSW,Rest of NSW,67.07050000000001,2845
+2846,Rest of NSW,Rest of NSW,591.8498,2846
+2847,Rest of NSW,Rest of NSW,98.897,2847
+2848,Rest of NSW,Rest of NSW,166.2149,2848
+2849,Rest of NSW,Rest of NSW,2801.0405,2849
+2850,Rest of NSW,Rest of NSW,6005.3758,2850
+2852,Rest of NSW,Rest of NSW,1240.991,2852
+2864,Rest of NSW,Rest of NSW,438.2457,2864
+2865,Rest of NSW,Rest of NSW,620.1745,2865
+2866,Rest of NSW,Rest of NSW,1198.7089,2866
+2867,Rest of NSW,Rest of NSW,1042.378,2867
+2868,Rest of NSW,Rest of NSW,777.9814,2868
+2869,Rest of NSW,Rest of NSW,2103.7978,2869
+2870,Rest of NSW,Rest of NSW,2453.9995,2870
+2871,Rest of NSW,Rest of NSW,3837.8532,2871
+2873,Rest of NSW,Rest of NSW,3202.9936,2873
+2874,Rest of NSW,Rest of NSW,1358.1326,2874
+2875,Rest of NSW,Rest of NSW,2311.0022,2875
+2876,Rest of NSW,Rest of NSW,935.4993,2876
+2877,Rest of NSW,Rest of NSW,15332.160300000001,2877
+2878,Rest of NSW,Rest of NSW,18261.1234,2878
+2879,Rest of NSW,Rest of NSW,13320.0094,2879
+2880,Rest of NSW,Rest of NSW,66191.4077,2880
+2898,Rest of NSW,Rest of NSW,16.2918,2898
+3644,Rest of NSW,Rest of NSW,209.65789999999998,3644
+3691,Rest of NSW,Rest of NSW,10.7037,3691
+3707,Rest of NSW,Rest of NSW,79.7545,3707
+4375,Rest of NSW,Rest of NSW,9.8281,4375
+4377,Rest of NSW,Rest of NSW,128.5994,4377
+4380,Rest of NSW,Rest of NSW,197.9126,4380
+4383,Rest of NSW,Rest of NSW,52.534400000000005,4383
+4385,Rest of NSW,Rest of NSW,578.7454,4385
+9494,Rest of NSW,No usual address (NSW),0.0,No usual address (Aust.)
+9797,Rest of NSW,Migratory - Offshore - Shipping (NSW),0.0,Migratory - Offshore - Shipping (Aust.)

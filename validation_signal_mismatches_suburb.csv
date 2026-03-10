@@ -1,0 +1,4 @@
+﻿level,region,dwelling,week_start,fact_signal,mart_signal,fact_n,mart_n,fact_span_days,mart_span_days
+SUBURB,SYDNEY,UNIT,2025-04-21,1326875.0,1351000.0,30,30,12,12.0
+SUBURB,VAUCLUSE,UNIT,2025-06-30,1565000.0,1675000.0,30,30,39,39.0
+SUBURB,STRATHFIELD,UNIT,2025-04-28,745000.0,767500.0,30,30,32,32.0
