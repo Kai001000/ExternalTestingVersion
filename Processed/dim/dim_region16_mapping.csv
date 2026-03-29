@@ -1,0 +1,65 @@
+region_id,region_key,region_name,postcode,source_suburbs
+1,cbd_inner_city,CBD / Inner City,2000,Haymarket | Sydney
+1,cbd_inner_city,CBD / Inner City,2007,Ultimo
+1,cbd_inner_city,CBD / Inner City,2008,Chippendale
+1,cbd_inner_city,CBD / Inner City,2009,Pyrmont
+1,cbd_inner_city,CBD / Inner City,2010,Darlinghurst | Surry Hills
+1,cbd_inner_city,CBD / Inner City,2011,Potts Point | Woolloomooloo
+2,inner_south,Inner South,2015,Alexandria
+2,inner_south,Inner South,2016,Redfern
+2,inner_south,Inner South,2017,Zetland
+2,inner_south,Inner South,2018,Rosebery
+2,inner_south,Inner South,2020,Mascot
+3,eastern_suburbs,Eastern Suburbs,2023,Bellevue Hill
+3,eastern_suburbs,Eastern Suburbs,2025,Woollahra
+3,eastern_suburbs,Eastern Suburbs,2026,Bondi
+3,eastern_suburbs,Eastern Suburbs,2028,Double Bay
+3,eastern_suburbs,Eastern Suburbs,2029,Rose Bay
+3,eastern_suburbs,Eastern Suburbs,2030,Vaucluse
+3,eastern_suburbs,Eastern Suburbs,2031,Randwick
+3,eastern_suburbs,Eastern Suburbs,2034,Coogee
+3,eastern_suburbs,Eastern Suburbs,2035,Maroubra
+4,inner_west,Inner West,2042,Newtown
+4,inner_west,Inner West,2131,Ashfield
+4,inner_west,Inner West,2134,Burwood
+4,inner_west,Inner West,2204,Marrickville
+5,lower_north_shore,Lower North Shore,2060,North Sydney
+5,lower_north_shore,Lower North Shore,2061,Kirribilli
+5,lower_north_shore,Lower North Shore,2067,Chatswood
+5,lower_north_shore,Lower North Shore,2088,Mosman
+5,lower_north_shore,Lower North Shore,2089,Neutral Bay
+5,lower_north_shore,Lower North Shore,2090,Cremorne
+6,upper_north_shore,Upper North Shore,2070,Lindfield
+6,upper_north_shore,Upper North Shore,2071,Killara
+6,upper_north_shore,Upper North Shore,2072,Gordon
+6,upper_north_shore,Upper North Shore,2074,Turramurra
+6,upper_north_shore,Upper North Shore,2077,Hornsby
+7,northern_beaches,Northern Beaches,2095,Manly
+7,northern_beaches,Northern Beaches,2099,Dee Why
+7,northern_beaches,Northern Beaches,2103,Mona Vale
+8,hills_district,Hills District,2154,Castle Hill
+8,hills_district,Hills District,2155,Kellyville | Rouse Hill
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2112,Ryde
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2113,Macquarie Park
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2121,Epping
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2122,Eastwood
+10,parramatta_central_west,Parramatta / Central West,2142,Granville
+10,parramatta_central_west,Parramatta / Central West,2145,Westmead
+10,parramatta_central_west,Parramatta / Central West,2150,Parramatta
+11,western_sydney,Western Sydney,2148,Blacktown
+11,western_sydney,Western Sydney,2750,Penrith
+11,western_sydney,Western Sydney,2770,Mount Druitt
+12,canterbury_bankstown,Canterbury-Bankstown,2194,Campsie
+12,canterbury_bankstown,Canterbury-Bankstown,2195,Lakemba
+12,canterbury_bankstown,Canterbury-Bankstown,2200,Bankstown
+13,st_george,St George,2216,Rockdale
+13,st_george,St George,2217,Kogarah
+13,st_george,St George,2220,Hurstville
+14,south_west_sydney,South West Sydney,2165,Fairfield
+14,south_west_sydney,South West Sydney,2166,Cabramatta
+14,south_west_sydney,South West Sydney,2170,Liverpool
+15,macarthur,Macarthur,2560,Campbelltown
+15,macarthur,Macarthur,2570,Camden | Oran Park
+16,sutherland_shire,Sutherland Shire,2228,Miranda
+16,sutherland_shire,Sutherland Shire,2229,Caringbah
+16,sutherland_shire,Sutherland Shire,2230,Cronulla

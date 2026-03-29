@@ -64,12 +64,19 @@ def _coerce_date(s: pd.Series) -> pd.Series:
     return pd.to_datetime(s, errors="coerce").dt.normalize()
 
 
+def _make_suburb_key_series(s: pd.Series) -> pd.Series:
+    return (
+        s.astype(str)
+         .str.strip()
+         .str.lower()
+         .str.replace(r"&", " and ", regex=True)
+         .str.replace(r"[^a-z0-9]+", "_", regex=True)
+         .str.replace(r"_+", "_", regex=True)
+         .str.strip("_")
+    )
+
+
 def _infer_greater_sydney_postcodes(dim_postcode_gccsa: pd.DataFrame) -> set[str]:
-    """
-    Works with:
-      - your current dim_postcode_gccsa.csv: columns ['postcode','region_group']
-    Also supports other schemas.
-    """
     if dim_postcode_gccsa is None or dim_postcode_gccsa.empty:
         return set()
 
@@ -94,7 +101,6 @@ def _infer_greater_sydney_postcodes(dim_postcode_gccsa: pd.DataFrame) -> set[str
     d[pc_col] = _normalize_str(d[pc_col])
     d[name_col] = _normalize_str(d[name_col])
 
-    # your file uses "Greater Sydney" / "Rest of NSW"
     mask = d[name_col].str.contains("Greater Sydney", case=False, na=False) | d[name_col].str.contains(
         "Sydney", case=False, na=False
     )
@@ -119,6 +125,7 @@ def _attach_suburb_postcode(daily_suburb: pd.DataFrame, dim_suburb_postcode: pd.
         if c in d.columns:
             suburb_col = c
             break
+
     postcode_col = None
     for c in ["postcode", "post_code", "postal_code", "POA_CODE_2021", "poa_code", "poa"]:
         if c in d.columns:
@@ -130,13 +137,130 @@ def _attach_suburb_postcode(daily_suburb: pd.DataFrame, dim_suburb_postcode: pd.
         return out
 
     d[suburb_col] = _normalize_str(d[suburb_col])
-    d[postcode_col] = _normalize_str(d[postcode_col])
+    d[postcode_col] = _normalize_str(d[postcode_col]).str.replace(r"\.0$", "", regex=True).str.zfill(4)
 
     d = d[[suburb_col, postcode_col]].drop_duplicates()
     d = d.rename(columns={suburb_col: "_suburb_join", postcode_col: "postcode"})
+
     out = out.rename(columns={"region": "_suburb_join"}).merge(d, on="_suburb_join", how="left")
     out = out.rename(columns={"_suburb_join": "region"})
-    out["postcode"] = out["postcode"].fillna("").astype(str)
+    out["postcode"] = out["postcode"].fillna("").astype(str).str.strip().str.replace(r"\.0$", "", regex=True).str.zfill(4)
+    return out
+
+
+def _attach_region16(df: pd.DataFrame, dim_region16: pd.DataFrame | None) -> pd.DataFrame:
+    out = df.copy()
+    if out.empty:
+        out["region16_name"] = ""
+        out["region16_key"] = ""
+        return out
+
+    if dim_region16 is None or dim_region16.empty:
+        out["region16_name"] = ""
+        out["region16_key"] = ""
+        return out
+
+    d = dim_region16.copy()
+
+    suburb_key_col = "suburb_key" if "suburb_key" in d.columns else None
+    postcode_col = "postcode" if "postcode" in d.columns else None
+    region_name_col = "region_name" if "region_name" in d.columns else None
+    region_key_col = "region_key" if "region_key" in d.columns else None
+
+    if suburb_key_col is None or postcode_col is None or region_name_col is None:
+        out["region16_name"] = ""
+        out["region16_key"] = ""
+        return out
+
+    out["postcode"] = out["postcode"].astype(str).str.strip().str.replace(r"\.0$", "", regex=True).str.zfill(4)
+    out["_suburb_key"] = _make_suburb_key_series(out["region"])
+
+    d[suburb_key_col] = d[suburb_key_col].astype(str).str.strip().str.lower()
+    d[postcode_col] = d[postcode_col].astype(str).str.strip().str.replace(r"\.0$", "", regex=True).str.zfill(4)
+    d[region_name_col] = d[region_name_col].astype(str).str.strip()
+
+    keep_cols = [suburb_key_col, postcode_col, region_name_col]
+    if region_key_col is not None:
+        keep_cols.append(region_key_col)
+
+    d = d[keep_cols].drop_duplicates()
+
+    out = out.merge(
+        d.rename(columns={
+            suburb_key_col: "_suburb_key",
+            postcode_col: "postcode",
+            region_name_col: "region16_name",
+            region_key_col: "region16_key" if region_key_col is not None else region_name_col
+        }),
+        on=["_suburb_key", "postcode"],
+        how="left",
+    )
+
+    if "region16_key" not in out.columns:
+        out["region16_key"] = ""
+
+    out["region16_name"] = out["region16_name"].fillna("").astype(str)
+    out["region16_key"] = out["region16_key"].fillna("").astype(str)
+
+    out = out.drop(columns=["_suburb_key"], errors="ignore")
+    return out
+
+
+# =========================
+# NEW: right-edge-only unstable rule
+# =========================
+def apply_right_edge_stability_rule(
+    df: pd.DataFrame,
+    group_cols: list[str],
+    date_col: str = "date",
+    raw_stable_col: str = "raw_stable",
+    out_col: str = "stable",
+) -> pd.DataFrame:
+    """
+    Rule:
+    - First compute raw_stable point-by-point
+    - Find the LAST raw_stable date in each group
+    - Mark ALL points on or before that last raw_stable date as stable
+    - Therefore unstable points can only appear on the RIGHT side
+
+    Example:
+      T T F T T F F  ->  T T T T T F F
+    """
+    if df is None or df.empty:
+        out = pd.DataFrame() if df is None else df.copy()
+        if not out.empty and out_col not in out.columns:
+            out[out_col] = False
+        return out
+
+    out = df.copy()
+    out[date_col] = _coerce_date(out[date_col])
+
+    if raw_stable_col not in out.columns:
+        out[raw_stable_col] = False
+
+    out[raw_stable_col] = out[raw_stable_col].fillna(False).astype(bool)
+    out[out_col] = False
+
+    if not group_cols:
+        stable_dates = out.loc[out[raw_stable_col], date_col].dropna()
+        if stable_dates.empty:
+            out[out_col] = False
+        else:
+            cutoff = stable_dates.max()
+            out[out_col] = out[date_col] <= cutoff
+        return out
+
+    for _, idx in out.groupby(group_cols, dropna=False).groups.items():
+        idx = list(idx)
+        sub = out.loc[idx, [date_col, raw_stable_col]].copy()
+        stable_dates = sub.loc[sub[raw_stable_col], date_col].dropna()
+
+        if stable_dates.empty:
+            out.loc[idx, out_col] = False
+        else:
+            cutoff = stable_dates.max()
+            out.loc[idx, out_col] = out.loc[idx, date_col] <= cutoff
+
     return out
 
 
@@ -150,10 +274,16 @@ def _pick_latest_valid_row_per_region(d: pd.DataFrame, required_notna: list[str]
     return dd.groupby("region", as_index=False).tail(1)
 
 
-def _pick_latest_stable_row_per_region(d: pd.DataFrame, stable_ratio: float, base_sales: dict[str, float] | None) -> pd.DataFrame:
+def _pick_latest_stable_row_per_region(
+    d: pd.DataFrame,
+    stable_ratio: float,
+    base_sales: dict[str, float] | None
+) -> pd.DataFrame:
     """
-    Stable condition: sales_28d >= base_sales[region] * stable_ratio (if base_sales known and >0)
-    If base_sales missing or 0 -> treat as stable.
+    Stable rule updated:
+    1) raw_stable = sales_28d >= base_sales * stable_ratio
+    2) apply right-edge-only unstable rule
+    3) pick latest stable row
     """
     if d.empty:
         return d
@@ -169,10 +299,18 @@ def _pick_latest_stable_row_per_region(d: pd.DataFrame, stable_ratio: float, bas
 
     out["base_sales"] = out["region"].map(base_sales).fillna(0)
 
-    out["is_stable"] = np.where(
+    out["raw_stable"] = np.where(
         out["base_sales"] > 0,
         out["sales_28d"] >= out["base_sales"] * float(stable_ratio),
         True,
+    )
+
+    out = apply_right_edge_stability_rule(
+        out,
+        group_cols=["region"],
+        date_col="date",
+        raw_stable_col="raw_stable",
+        out_col="is_stable",
     )
 
     stable = out[out["is_stable"]].copy()
@@ -183,17 +321,12 @@ def _pick_latest_stable_row_per_region(d: pd.DataFrame, stable_ratio: float, bas
     return stable.groupby("region", as_index=False).tail(1)
 
 
-# ---------- NEW: Anchor-lag change calculator ----------
 def _calc_change_at_anchor(
     series_df: pd.DataFrame,
     anchor_date: pd.Timestamp,
     lag_days: int,
     value_col: str = "rolling_median",
 ) -> float | None:
-    """
-    change = value(anchor_date) / value(anchor_date - lag_days) - 1
-    Requires BOTH values present and non-null.
-    """
     if series_df is None or series_df.empty or anchor_date is None:
         return None
 
@@ -219,12 +352,6 @@ def _calc_mom_qoq_for_snapshot(
     group_cols: list[str],
     value_col: str = "rolling_median",
 ) -> pd.DataFrame:
-    """
-    For each row in snapshot, compute:
-      mom = value(as_of) / value(as_of-28) - 1
-      qoq = value(as_of) / value(as_of-84) - 1
-    using the full_series within the same group.
-    """
     if snapshot.empty:
         return snapshot
 
@@ -232,22 +359,22 @@ def _calc_mom_qoq_for_snapshot(
     out["mom"] = None
     out["qoq"] = None
 
-    # Pre-split for speed
     full_series = full_series.copy()
     full_series["date"] = _coerce_date(full_series["date"])
 
-    # group by keys -> compute
     for idx, row in out.iterrows():
         key = tuple(row[c] for c in group_cols)
         mask = np.ones(len(full_series), dtype=bool)
         for c, v in zip(group_cols, key):
             mask &= (full_series[c] == v)
+
         g = full_series.loc[mask, ["date", value_col]].dropna(subset=[value_col]).copy()
         if g.empty:
             continue
-        g = g.sort_values("date")
 
+        g = g.sort_values("date")
         anchor_date = row["date"]
+
         out.at[idx, "mom"] = _calc_change_at_anchor(g, anchor_date, 28, value_col=value_col)
         out.at[idx, "qoq"] = _calc_change_at_anchor(g, anchor_date, 84, value_col=value_col)
 
@@ -255,33 +382,27 @@ def _calc_mom_qoq_for_snapshot(
 
 
 # =========================
-# Public: Stable top/bottom ranking tables (SUBURB)
+# New public: full suburb rank snapshot
 # =========================
-def build_stable_top_bottom_tables(
+def build_suburb_rank_snapshot(
     daily_suburb: pd.DataFrame,
     dim_suburb_postcode: pd.DataFrame | None,
     dim_postcode_gccsa: pd.DataFrame | None,
+    dim_region16: pd.DataFrame | None,
     dwelling: str,
-    change_kind: str = "mom",  # "mom" or "qoq"
-    top_n: int = 5,
     only_greater_sydney: bool = True,
     use_stable: bool = False,
     stable_ratio: float | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Expected daily_suburb columns:
-      - date, region, dwelling_group, rolling_median, sales_28d
-    NOTE: We DO NOT rely on precomputed mom/qoq columns anymore.
-    """
+) -> pd.DataFrame:
     if daily_suburb is None or daily_suburb.empty:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame()
 
     d = daily_suburb.copy()
 
     needed = ["date", "region", "dwelling_group", "rolling_median", "sales_28d"]
     for c in needed:
         if c not in d.columns:
-            return pd.DataFrame(), pd.DataFrame()
+            return pd.DataFrame()
 
     d["date"] = _coerce_date(d["date"])
     d["region"] = _normalize_str(d["region"])
@@ -290,9 +411,8 @@ def build_stable_top_bottom_tables(
     d = d.dropna(subset=["date"]).copy()
     d = d[d["dwelling_group"].str.upper() == str(dwelling).upper()].copy()
     if d.empty:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame()
 
-    # join postcode for filtering & display
     d = _attach_suburb_postcode(d, dim_suburb_postcode if dim_suburb_postcode is not None else pd.DataFrame())
 
     if only_greater_sydney:
@@ -301,14 +421,12 @@ def build_stable_top_bottom_tables(
             d = d[d["postcode"].astype(str).isin(gs_postcodes)].copy()
 
     if d.empty:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame()
 
-    # only keep valid rolling_median points for anchor logic
     d_valid = d.dropna(subset=["rolling_median"]).copy()
     if d_valid.empty:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame()
 
-    # choose snapshot rows
     if use_stable:
         if stable_ratio is None:
             stable_ratio = 0.6
@@ -317,9 +435,8 @@ def build_stable_top_bottom_tables(
         snap = _pick_latest_valid_row_per_region(d_valid, required_notna=["rolling_median"])
 
     if snap.empty:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame()
 
-    # compute mom/qoq at snapshot anchors (YOUR desired definition)
     snap = _calc_mom_qoq_for_snapshot(
         full_series=d_valid,
         snapshot=snap,
@@ -327,38 +444,126 @@ def build_stable_top_bottom_tables(
         value_col="rolling_median",
     )
 
-    if change_kind not in ["mom", "qoq"]:
-        change_kind = "mom"
+    snap = _attach_region16(snap, dim_region16 if dim_region16 is not None else pd.DataFrame())
 
-    snap["change"] = snap[change_kind]
-    snap = snap.dropna(subset=["change", "rolling_median"]).copy()
-    if snap.empty:
+    out = snap[[
+        "region",
+        "postcode",
+        "region16_name",
+        "date",
+        "rolling_median",
+        "sales_28d",
+        "mom",
+        "qoq",
+    ]].copy()
+
+    out = out.rename(columns={
+        "region": "Suburb",
+        "postcode": "Postcode",
+        "region16_name": "Region16",
+        "date": "As of",
+        "rolling_median": "28d median",
+        "sales_28d": "28d sales",
+        "mom": "MoM",
+        "qoq": "QoQ",
+    })
+
+    out["Postcode"] = out["Postcode"].fillna("").astype(str)
+    out["Region16"] = out["Region16"].fillna("").astype(str)
+    out["As of"] = _coerce_date(out["As of"])
+
+    return out.reset_index(drop=True)
+
+
+def filter_rank_snapshot_table(
+    snapshot_df: pd.DataFrame,
+    metric: str,
+    selected_region16: list[str] | None = None,
+    sales_min: int | None = None,
+    sales_max: int | None = None,
+    median_min: float | None = None,
+    median_max: float | None = None,
+    change_min: float | None = None,
+    change_max: float | None = None,
+) -> pd.DataFrame:
+    if snapshot_df is None or snapshot_df.empty:
+        return pd.DataFrame()
+
+    metric = str(metric).strip()
+    if metric not in {"MoM", "QoQ"}:
+        metric = "MoM"
+
+    d = snapshot_df.copy()
+
+    d["28d sales"] = pd.to_numeric(d["28d sales"], errors="coerce")
+    d["28d median"] = pd.to_numeric(d["28d median"], errors="coerce")
+    d["MoM"] = pd.to_numeric(d["MoM"], errors="coerce")
+    d["QoQ"] = pd.to_numeric(d["QoQ"], errors="coerce")
+    d["As of"] = _coerce_date(d["As of"])
+
+    if selected_region16:
+        d = d[d["Region16"].isin(selected_region16)].copy()
+
+    if sales_min is not None:
+        d = d[d["28d sales"].fillna(-np.inf) >= float(sales_min)].copy()
+    if sales_max is not None:
+        d = d[d["28d sales"].fillna(np.inf) <= float(sales_max)].copy()
+
+    if median_min is not None:
+        d = d[d["28d median"].fillna(-np.inf) >= float(median_min)].copy()
+    if median_max is not None:
+        d = d[d["28d median"].fillna(np.inf) <= float(median_max)].copy()
+
+    if change_min is not None:
+        d = d[d[metric].fillna(-np.inf) >= float(change_min)].copy()
+    if change_max is not None:
+        d = d[d[metric].fillna(np.inf) <= float(change_max)].copy()
+
+    d = d.dropna(subset=[metric, "28d median"]).copy()
+    if d.empty:
+        return pd.DataFrame()
+
+    d = d.sort_values(metric, ascending=False).reset_index(drop=True)
+
+    out = d[["Suburb", "Postcode", "Region16", "As of", "28d median", "28d sales", metric]].copy()
+    out["As of"] = out["As of"].apply(fmt_date)
+    out["28d median"] = out["28d median"].apply(fmt_float0)
+    out["28d sales"] = out["28d sales"].apply(fmt_int)
+    out[metric] = out[metric].apply(fmt_pct)
+
+    return out
+
+
+def build_stable_top_bottom_tables(
+    daily_suburb: pd.DataFrame,
+    dim_suburb_postcode: pd.DataFrame | None,
+    dim_postcode_gccsa: pd.DataFrame | None,
+    dwelling: str,
+    change_kind: str = "mom",
+    top_n: int = 5,
+    only_greater_sydney: bool = True,
+    use_stable: bool = False,
+    stable_ratio: float | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    snap = build_suburb_rank_snapshot(
+        daily_suburb=daily_suburb,
+        dim_suburb_postcode=dim_suburb_postcode,
+        dim_postcode_gccsa=dim_postcode_gccsa,
+        dim_region16=None,
+        dwelling=dwelling,
+        only_greater_sydney=only_greater_sydney,
+        use_stable=use_stable,
+        stable_ratio=stable_ratio,
+    )
+
+    metric = "MoM" if str(change_kind).lower() == "mom" else "QoQ"
+    full = filter_rank_snapshot_table(snap, metric=metric)
+    if full.empty:
         return pd.DataFrame(), pd.DataFrame()
 
-    # rank
-    snap = snap.sort_values("change", ascending=False)
-    top = snap.head(int(top_n)).copy()
-    bot = snap.tail(int(top_n)).sort_values("change", ascending=True).copy()
-
-    def _pretty(df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty:
-            return df
-        out = df[["region", "postcode", "date", "rolling_median", "sales_28d", "change"]].copy()
-        out = out.rename(columns={
-            "region": "Suburb",
-            "postcode": "Postcode",
-            "date": "As of",
-            "rolling_median": "28d median",
-            "sales_28d": "28d sales",
-            "change": change_kind.upper(),
-        })
-        out["As of"] = out["As of"].apply(fmt_date)
-        out["28d median"] = out["28d median"].apply(fmt_float0)
-        out["28d sales"] = out["28d sales"].apply(fmt_int)
-        out[change_kind.upper()] = out[change_kind.upper()].apply(fmt_pct)
-        return out
-
-    return _pretty(top), _pretty(bot)
+    top = full.head(int(top_n)).copy()
+    bot = full.tail(int(top_n)).iloc[::-1].copy()
+    return top, bot
 
 
 # =========================
@@ -372,11 +577,6 @@ def build_region_overview_table(
     stable_ratio: float | None = None,
     base_sales: dict[str, float] | None = None,
 ) -> pd.DataFrame:
-    """
-    daily_df expected:
-      date, region, dwelling_group, rolling_median, sales_28d
-    NOTE: We compute MoM/QoQ using anchor-lag definition (no reliance on precomputed columns).
-    """
     if daily_df is None or daily_df.empty:
         return pd.DataFrame()
 
@@ -413,7 +613,6 @@ def build_region_overview_table(
     if snap.empty:
         return pd.DataFrame()
 
-    # compute mom/qoq at snapshot anchors
     snap = _calc_mom_qoq_for_snapshot(
         full_series=d_valid,
         snapshot=snap,

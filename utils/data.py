@@ -1,11 +1,609 @@
-# utils/data.py (完整文件)
-from pathlib import Path
 import re
-import pandas as pd
-import streamlit as st
-import polars as pl
+from pathlib import Path
 
-from .config import MART_WEEKLY_DIR, MART_MONTHLY_DIR, MART_DAILY_ROLLING_DIR, BASE_DIR
+import numpy as np
+import pandas as pd
+import polars as pl
+import streamlit as st
+
+from .config import (
+    BASE_DIR,
+    DEFAULT_DOMAIN_RENT_LISTINGS_PARQUET,
+    DEFAULT_DOMAIN_SALE_LISTINGS_PARQUET,
+    CURRENT_RENT_CLASSIFICATION_JSONL,
+    DOMAIN_RENT_LISTINGS_ENV_VAR,
+    DOMAIN_SALE_LISTINGS_ENV_VAR,
+    LEGACY_DOMAIN_RENT_LISTINGS_PARQUET,
+    LEGACY_DOMAIN_SALE_LISTINGS_PARQUET,
+    MART_MONTHLY_DIR,
+    MART_WEEKLY_DIR,
+    STANDARD_RESIDENTIAL_LISTING_CLASSIFICATION,
+)
+
+ANALYTICS_PRICE_MIN = 80_000
+ANALYTICS_PRICE_MAX = 20_000_000
+ADAPTIVE_PRICE_P5 = 0.05
+ADAPTIVE_PRICE_P95 = 0.95
+ADAPTIVE_LOWER_MULTIPLIER = 0.7
+ADAPTIVE_UPPER_MULTIPLIER = 1.5
+ADAPTIVE_MIN_HISTORY_ROWS = 50
+ALLOWED_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
+DOMAIN_LISTING_COLUMNS = [
+    "listing_id",
+    "url",
+    "address",
+    "suburb",
+    "postcode",
+    "state",
+    "latitude",
+    "longitude",
+    "price_display",
+    "price_min",
+    "price_max",
+    "property_type",
+    "bedrooms",
+    "bathrooms",
+    "parking",
+    "land_size",
+    "listing_date",
+    "agent_name",
+    "agency_name",
+    "main_image",
+]
+PROPERTY_TYPE_GROUP_LABELS = {
+    "house": "House",
+    "apartment": "Apartment",
+    "townhouse": "Townhouse",
+    "land": "Land",
+    "other": "Other",
+}
+DOMAIN_LISTING_STRING_COLUMNS = [
+    "listing_id",
+    "url",
+    "address",
+    "suburb",
+    "postcode",
+    "state",
+    "price_display",
+    "property_type",
+    "listing_date",
+    "agent_name",
+    "agency_name",
+    "main_image",
+]
+DOMAIN_LISTING_NUMERIC_COLUMNS = [
+    "latitude",
+    "longitude",
+    "price_min",
+    "price_max",
+    "bedrooms",
+    "bathrooms",
+    "parking",
+    "land_size",
+]
+DOMAIN_RENT_LISTING_COLUMNS = [
+    "listing_id",
+    "url",
+    "address",
+    "suburb",
+    "postcode",
+    "state",
+    "latitude",
+    "longitude",
+    "rent_display",
+    "rent_min",
+    "rent_max",
+    "rent_frequency",
+    "property_type",
+    "bedrooms",
+    "bathrooms",
+    "parking",
+    "furnished",
+    "available_date",
+    "bond",
+    "lease_term",
+    "agent_name",
+    "agency_name",
+    "main_image",
+    "features",
+    "description",
+]
+DOMAIN_RENT_LISTING_STRING_COLUMNS = [
+    "listing_id",
+    "url",
+    "address",
+    "suburb",
+    "postcode",
+    "state",
+    "rent_display",
+    "rent_frequency",
+    "property_type",
+    "furnished",
+    "available_date",
+    "lease_term",
+    "agent_name",
+    "agency_name",
+    "main_image",
+    "features",
+    "description",
+]
+DOMAIN_RENT_LISTING_NUMERIC_COLUMNS = [
+    "latitude",
+    "longitude",
+    "rent_min",
+    "rent_max",
+    "bedrooms",
+    "bathrooms",
+    "parking",
+    "bond",
+]
+PRICE_SANITY_MULTIPLIER = 5.0
+PRICE_SANITY_MAX_ZERO_TRIMS = 4
+
+
+def format_price(value, *, prefix: str = "$", na_label: str = "N/A") -> str:
+    if value is None or pd.isna(value):
+        return na_label
+    return f"{prefix}{int(round(float(value))):,}"
+
+
+def _format_price_display(price_min, price_max, raw_display) -> str:
+    if pd.notna(price_min) and pd.notna(price_max):
+        lower = format_price(price_min)
+        upper = format_price(price_max)
+        if int(round(float(price_min))) == int(round(float(price_max))):
+            return f"Guide {lower}"
+        return f"Guide {lower} – {upper}"
+    cleaned = _clean_string_series(pd.Series([raw_display])).iloc[0]
+    return str(cleaned) if pd.notna(cleaned) else "Price on request"
+
+
+def _repair_suspicious_price_bounds(price_min, price_max) -> tuple[float, float, str]:
+    if pd.isna(price_min) and pd.isna(price_max):
+        return np.nan, np.nan, "missing"
+    if pd.isna(price_min):
+        return float(price_max), float(price_max), "single_bound"
+    if pd.isna(price_max):
+        return float(price_min), float(price_min), "single_bound"
+
+    low = float(price_min)
+    high = float(price_max)
+    repair_flag = "original"
+
+    if high < low:
+        low, high = high, low
+        repair_flag = "swapped"
+
+    if low > 0 and high > low * PRICE_SANITY_MULTIPLIER:
+        candidate = high
+        for _ in range(PRICE_SANITY_MAX_ZERO_TRIMS):
+            if candidate % 10 != 0:
+                break
+            candidate /= 10.0
+            if low <= candidate <= low * PRICE_SANITY_MULTIPLIER:
+                high = candidate
+                repair_flag = "trimmed_trailing_zero"
+                break
+
+    return low, high, repair_flag
+
+
+def _clean_string_series(series: pd.Series) -> pd.Series:
+    out = series.astype("string").str.strip()
+    return out.mask(out.isin(["", "nan", "None", "null", "NaN"]), pd.NA)
+
+
+def _canonicalize_property_type(value) -> str:
+    if pd.isna(value):
+        return "unknown"
+    text = str(value).strip().lower()
+    if not text:
+        return "unknown"
+    text = re.sub(r"\s*&\s*", " and ", text)
+    text = re.sub(r"[/_-]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _normalize_property_type(value) -> tuple[str, str]:
+    canonical = _canonicalize_property_type(value)
+
+    subtype_aliases = {
+        "house": "house",
+        "free standing": "free standing",
+        "freestanding": "free standing",
+        "semi detached": "semi detached",
+        "semidetached": "semi detached",
+        "duplex": "duplex",
+        "terrace": "terrace",
+        "villa": "villa",
+        "apartment": "apartment",
+        "unit": "unit",
+        "flat": "flat",
+        "studio": "studio",
+        "penthouse": "penthouse",
+        "block of units": "block of units",
+        "townhouse": "townhouse",
+        "town house": "townhouse",
+        "land": "land",
+        "vacant land": "vacant land",
+        "development site": "development site",
+        "new land": "new land",
+        "retirement": "retirement",
+        "unknown": "unknown",
+    }
+
+    subtype = "unknown"
+    group = "other"
+
+    if canonical in {"house", "free standing", "freestanding", "semi detached", "semidetached", "duplex", "terrace", "villa"}:
+        subtype = subtype_aliases.get(canonical, "house")
+        group = "house"
+    elif canonical in {"apartment", "unit", "flat", "studio", "penthouse", "block of units"}:
+        subtype = subtype_aliases.get(canonical, "apartment")
+        group = "apartment"
+    elif canonical in {"townhouse", "town house"}:
+        subtype = "townhouse"
+        group = "townhouse"
+    elif canonical in {"land", "vacant land", "development site", "new land"}:
+        subtype = subtype_aliases.get(canonical, "land")
+        group = "land"
+    elif canonical == "retirement":
+        subtype = "retirement"
+        group = "other"
+    elif canonical == "unknown":
+        subtype = "unknown"
+        group = "other"
+    elif any(token in canonical for token in ["apartment", "unit", "flat"]):
+        subtype = "apartment"
+        group = "apartment"
+    elif "studio" in canonical:
+        subtype = "studio"
+        group = "apartment"
+    elif "penthouse" in canonical:
+        subtype = "penthouse"
+        group = "apartment"
+    elif "block of units" in canonical:
+        subtype = "block of units"
+        group = "apartment"
+    elif "town house" in canonical or "townhouse" in canonical:
+        subtype = "townhouse"
+        group = "townhouse"
+    elif canonical in {"new house and land", "new home designs"}:
+        subtype = "house"
+        group = "house"
+    elif "house" in canonical:
+        subtype = "house"
+        group = "house"
+    elif canonical in {"new apartments and off the plan"}:
+        subtype = "apartment"
+        group = "apartment"
+    elif "land" in canonical or "development site" in canonical:
+        subtype = "land" if canonical == "land" else ("development site" if "development site" in canonical else "new land")
+        group = "land"
+    elif canonical in {"all sale", "car space", "rural", "acreage semi rural", "farm", "specialist farm", "rural lifestyle", "livestock", "mixed farming", "horticulture", "farmlet", "equine", "viticulture"}:
+        subtype = "unknown"
+        group = "other"
+
+    return group, subtype
+
+
+def _resolve_domain_listing_parquet_path() -> Path:
+    configured = ""
+    try:
+        configured = str(
+            st.secrets.get("domain_sale_listings_parquet", "")
+            or st.secrets.get("domain_listings_parquet", "")
+        ).strip()
+    except Exception:
+        configured = ""
+    if not configured:
+        configured = str(DEFAULT_DOMAIN_SALE_LISTINGS_PARQUET)
+    path = Path(configured).expanduser()
+    if not path.is_absolute():
+        path = (BASE_DIR / path).resolve()
+    if not path.exists():
+        legacy_path = Path(LEGACY_DOMAIN_SALE_LISTINGS_PARQUET).expanduser()
+        if legacy_path.exists():
+            return legacy_path
+    return path
+
+
+def get_domain_listing_source_status() -> dict[str, str | bool]:
+    path = _resolve_domain_listing_parquet_path()
+    return {
+        "path": str(path),
+        "env_var": DOMAIN_SALE_LISTINGS_ENV_VAR,
+        "exists": path.exists(),
+    }
+
+
+def _resolve_domain_rent_listing_parquet_path() -> Path:
+    configured = ""
+    try:
+        configured = str(st.secrets.get("domain_rent_listings_parquet", "")).strip()
+    except Exception:
+        configured = ""
+    if not configured:
+        configured = str(DEFAULT_DOMAIN_RENT_LISTINGS_PARQUET)
+    path = Path(configured).expanduser()
+    if not path.is_absolute():
+        path = (BASE_DIR / path).resolve()
+    if not path.exists():
+        legacy_path = Path(LEGACY_DOMAIN_RENT_LISTINGS_PARQUET).expanduser()
+        if legacy_path.exists():
+            return legacy_path
+    return path
+
+
+def get_domain_rent_source_status() -> dict[str, str | bool]:
+    path = _resolve_domain_rent_listing_parquet_path()
+    return {
+        "path": str(path),
+        "env_var": DOMAIN_RENT_LISTINGS_ENV_VAR,
+        "exists": path.exists(),
+        "default_listing_classification": STANDARD_RESIDENTIAL_LISTING_CLASSIFICATION,
+    }
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _load_domain_rent_classification_lookup(parquet_path_str: str) -> pd.DataFrame:
+    parquet_path = Path(parquet_path_str)
+    jsonl_path = parquet_path.parent / "nsw_rent_full_deduped.jsonl"
+    if not jsonl_path.exists() and CURRENT_RENT_CLASSIFICATION_JSONL.exists():
+        jsonl_path = CURRENT_RENT_CLASSIFICATION_JSONL
+    if not jsonl_path.exists():
+        return pd.DataFrame(columns=["listing_id", "listing_classification", "is_standard_rental"])
+
+    lookup = pd.read_json(
+        jsonl_path,
+        lines=True,
+        dtype={"listing_id": "string"},
+    )
+    required_columns = {"listing_id", "rental_listing_category", "is_standard_rental"}
+    if not required_columns.issubset(lookup.columns):
+        return pd.DataFrame(columns=["listing_id", "listing_classification", "is_standard_rental"])
+
+    return (
+        lookup.loc[:, ["listing_id", "rental_listing_category", "is_standard_rental"]]
+        .rename(columns={"rental_listing_category": "listing_classification"})
+        .dropna(subset=["listing_id"])
+        .drop_duplicates(subset=["listing_id"], keep="last")
+    )
+
+
+def _prepare_domain_listing_frame(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+
+    for col in DOMAIN_LISTING_COLUMNS:
+        if col not in out.columns:
+            out[col] = pd.NA
+
+    out = out[DOMAIN_LISTING_COLUMNS]
+
+    for col in DOMAIN_LISTING_STRING_COLUMNS:
+        out[col] = _clean_string_series(out[col])
+
+    out["postcode"] = out["postcode"].astype("string").str.replace(r"\.0$", "", regex=True).str.zfill(4)
+    out["postcode"] = out["postcode"].mask(out["postcode"].isin(["0000", "<NA>"]), pd.NA)
+
+    for col in DOMAIN_LISTING_NUMERIC_COLUMNS:
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    out["listing_date"] = pd.to_datetime(out["listing_date"], errors="coerce", format="mixed")
+    property_norm = out["property_type"].map(_normalize_property_type)
+    out["property_group"] = property_norm.map(lambda x: x[0])
+    out["property_subtype"] = property_norm.map(lambda x: x[1])
+    out["property_group_label"] = out["property_group"].map(PROPERTY_TYPE_GROUP_LABELS).fillna("Other")
+
+    repaired_bounds = out.apply(
+        lambda row: _repair_suspicious_price_bounds(row["price_min"], row["price_max"]),
+        axis=1,
+        result_type="expand",
+    )
+    repaired_bounds.columns = ["price_filter_min", "price_filter_max", "price_cleaning_flag"]
+    out[["price_filter_min", "price_filter_max", "price_cleaning_flag"]] = repaired_bounds
+    out["price_mid"] = np.where(
+        out["price_filter_min"].notna() & out["price_filter_max"].notna(),
+        (out["price_filter_min"] + out["price_filter_max"]) / 2.0,
+        np.nan,
+    )
+    out["has_price"] = out["price_filter_min"].notna() & out["price_filter_max"].notna()
+    out["has_coordinates"] = out["latitude"].notna() & out["longitude"].notna()
+    out["price_display"] = out.apply(
+        lambda row: _format_price_display(row["price_filter_min"], row["price_filter_max"], row["price_display"]),
+        axis=1,
+    )
+
+    return out
+
+
+def _classify_rent_listing(row: pd.Series) -> str:
+    text_parts = [
+        row.get("url"),
+        row.get("address"),
+        row.get("rent_display"),
+        row.get("property_type"),
+        row.get("description"),
+    ]
+    text = " ".join(str(value) for value in text_parts if pd.notna(value)).lower()
+
+    if re.search(r"\b(boarding|boarder|boarders|boarding house)\b", text):
+        return "boarding"
+    if re.search(r"\b(short stay|short-term stay|holiday|holiday rental|vacation|airbnb|per night|nightly)\b", text):
+        return "short_stay_holiday"
+    if re.search(r"\b(room for rent|room to rent|room available|shared accommodation|share house|roomshare|room share)\b", text):
+        return "room_share"
+    if re.search(r"\b(car ?space|carpark|car park|parking space|secure parking|garage for lease|lock[- ]?up garage)\b", text):
+        return "parking_car_space"
+    if re.search(r"\b(storage|storage shed|storage sheds|self storage|shed\/|shed\b|shipping container|container storage|warehouse storage)\b", text):
+        return "storage"
+    return STANDARD_RESIDENTIAL_LISTING_CLASSIFICATION
+
+
+def _prepare_domain_rent_listing_frame(
+    df: pd.DataFrame,
+    *,
+    classification_lookup: pd.DataFrame | None = None,
+    standard_residential_only: bool = True,
+) -> pd.DataFrame:
+    out = df.copy()
+
+    for col in DOMAIN_RENT_LISTING_COLUMNS:
+        if col not in out.columns:
+            out[col] = pd.NA
+
+    out = out[DOMAIN_RENT_LISTING_COLUMNS]
+
+    for col in DOMAIN_RENT_LISTING_STRING_COLUMNS:
+        out[col] = _clean_string_series(out[col])
+
+    out["postcode"] = out["postcode"].astype("string").str.replace(r"\.0$", "", regex=True).str.zfill(4)
+    out["postcode"] = out["postcode"].mask(out["postcode"].isin(["0000", "<NA>"]), pd.NA)
+
+    for col in DOMAIN_RENT_LISTING_NUMERIC_COLUMNS:
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    out["available_date"] = pd.to_datetime(out["available_date"], errors="coerce", format="mixed")
+    property_norm = out["property_type"].map(_normalize_property_type)
+    out["property_group"] = property_norm.map(lambda x: x[0])
+    out["property_subtype"] = property_norm.map(lambda x: x[1])
+    out["property_group_label"] = out["property_group"].map(PROPERTY_TYPE_GROUP_LABELS).fillna("Other")
+
+    if classification_lookup is not None and not classification_lookup.empty:
+        classification_lookup = classification_lookup.copy()
+        classification_lookup["listing_id"] = classification_lookup["listing_id"].astype("string")
+        out["listing_id"] = out["listing_id"].astype("string")
+        out = out.merge(classification_lookup, on="listing_id", how="left")
+    else:
+        out["listing_classification"] = pd.NA
+        out["is_standard_rental"] = pd.NA
+
+    fallback_mask = out["listing_classification"].isna()
+    if fallback_mask.any():
+        out.loc[fallback_mask, "listing_classification"] = out.loc[fallback_mask].apply(_classify_rent_listing, axis=1)
+
+    out["listing_classification"] = _clean_string_series(out["listing_classification"]).fillna(STANDARD_RESIDENTIAL_LISTING_CLASSIFICATION)
+    out["is_standard_rental"] = out["listing_classification"].eq(STANDARD_RESIDENTIAL_LISTING_CLASSIFICATION)
+
+    repaired_bounds = out.apply(
+        lambda row: _repair_suspicious_price_bounds(row["rent_min"], row["rent_max"]),
+        axis=1,
+        result_type="expand",
+    )
+    repaired_bounds.columns = ["rent_filter_min", "rent_filter_max", "rent_cleaning_flag"]
+    out[["rent_filter_min", "rent_filter_max", "rent_cleaning_flag"]] = repaired_bounds
+    out["rent_mid"] = np.where(
+        out["rent_filter_min"].notna() & out["rent_filter_max"].notna(),
+        (out["rent_filter_min"] + out["rent_filter_max"]) / 2.0,
+        np.nan,
+    )
+    out["has_rent"] = out["rent_filter_min"].notna() & out["rent_filter_max"].notna()
+    out["has_coordinates"] = out["latitude"].notna() & out["longitude"].notna()
+
+    if standard_residential_only:
+        out = out.loc[out["listing_classification"] == STANDARD_RESIDENTIAL_LISTING_CLASSIFICATION].copy()
+
+    return out
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def load_domain_sale_listings() -> pd.DataFrame:
+    path = _resolve_domain_listing_parquet_path()
+    if not path.exists():
+        return pd.DataFrame(
+            columns=DOMAIN_LISTING_COLUMNS + ["price_filter_min", "price_filter_max", "price_mid", "has_price", "has_coordinates", "price_cleaning_flag"]
+        )
+
+    df = pd.read_parquet(path, columns=DOMAIN_LISTING_COLUMNS)
+    return _prepare_domain_listing_frame(df)
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def load_domain_rent_listings(*, standard_residential_only: bool = True) -> pd.DataFrame:
+    path = _resolve_domain_rent_listing_parquet_path()
+    fallback_columns = DOMAIN_RENT_LISTING_COLUMNS + [
+        "property_group",
+        "property_subtype",
+        "property_group_label",
+        "listing_classification",
+        "is_standard_rental",
+        "rent_filter_min",
+        "rent_filter_max",
+        "rent_mid",
+        "has_rent",
+        "has_coordinates",
+        "rent_cleaning_flag",
+    ]
+    if not path.exists():
+        return pd.DataFrame(columns=fallback_columns)
+
+    df = pd.read_parquet(path, columns=DOMAIN_RENT_LISTING_COLUMNS)
+    classification_lookup = _load_domain_rent_classification_lookup(str(path))
+    return _prepare_domain_rent_listing_frame(
+        df,
+        classification_lookup=classification_lookup,
+        standard_residential_only=standard_residential_only,
+    )
+
+
+def _normalize_postcode_expr(expr: pl.Expr) -> pl.Expr:
+    return (
+        expr.cast(pl.Utf8)
+        .str.strip_chars()
+        .str.replace(r"\.0$", "")
+        .str.zfill(4)
+    )
+
+
+def add_underlying_trend(
+    df: pd.DataFrame,
+    *,
+    group_cols: list[str],
+    date_col: str,
+    value_col: str,
+    out_col: str = "underlying_trend",
+    tail_col: str = "underlying_trend_tail",
+    window_days: int = 91,
+) -> pd.DataFrame:
+    if df is None or df.empty:
+        out = pd.DataFrame() if df is None else df.copy()
+        if not out.empty:
+            out[out_col] = np.nan
+            out[tail_col] = False
+        return out
+
+    out = df.copy()
+    out[date_col] = pd.to_datetime(out[date_col], errors="coerce").dt.normalize()
+    out[value_col] = pd.to_numeric(out[value_col], errors="coerce")
+    out[out_col] = np.nan
+    out[tail_col] = False
+
+    if not group_cols:
+        group_iter = [(None, out.index)]
+    else:
+        group_iter = out.groupby(group_cols, dropna=False).groups.items()
+
+    tail_days = max(int(window_days // 2), 1)
+    min_periods = max(int(window_days // 3), 14)
+
+    for _, idx in group_iter:
+        idx = list(idx)
+        sub = out.loc[idx, [date_col, value_col]].sort_values(date_col).copy()
+        if sub.empty:
+            continue
+        trend = (
+            sub[value_col]
+            .rolling(window=window_days, center=True, min_periods=min_periods)
+            .mean()
+        )
+        sub[out_col] = trend
+        max_date = sub[date_col].max()
+        sub[tail_col] = sub[date_col] > (max_date - pd.Timedelta(days=tail_days))
+        out.loc[sub.index, out_col] = sub[out_col]
+        out.loc[sub.index, tail_col] = sub[tail_col]
+
+    return out
 
 
 def list_dataset_labels() -> list[str]:
@@ -24,33 +622,44 @@ def _normalize_level(level: str) -> str:
     if not s:
         return "NSW"
     s_low = s.lower()
+
     if s_low == "nsw":
         return "NSW"
     if s_low == "region":
         return "REGION"
+    if s_low == "region16":
+        return "REGION16"
     if s_low == "suburb":
         return "SUBURB"
     if s_low == "postcode":
         return "POSTCODE"
+
     if s_low.startswith("nsw"):
         return "NSW"
+    if s_low.startswith("region16"):
+        return "REGION16"
     if s_low.startswith("region"):
         return "REGION"
     if s_low.startswith("suburb"):
         return "SUBURB"
     if s_low.startswith("postcode"):
         return "POSTCODE"
+
     if "全州" in s or "statewide" in s_low:
         return "NSW"
+    if "16区" in s or "16 区" in s or "custom region" in s_low:
+        return "REGION16"
     if "大悉尼" in s or "区域" in s or "greater sydney" in s_low or "rest of nsw" in s_low:
         return "REGION"
     if "城区" in s:
         return "SUBURB"
     if "邮编" in s:
         return "POSTCODE"
+
     s_up = s.upper()
-    if s_up in {"NSW", "REGION", "SUBURB", "POSTCODE"}:
+    if s_up in {"NSW", "REGION", "REGION16", "SUBURB", "POSTCODE"}:
         return s_up
+
     return "NSW"
 
 
@@ -61,14 +670,18 @@ def load_weekly(level: str, label: str) -> pd.DataFrame:
         path = MART_WEEKLY_DIR / f"mart_weekly_nsw_{label}.parquet"
     elif level == "REGION":
         path = MART_WEEKLY_DIR / f"mart_weekly_region_{label}.parquet"
+    elif level == "REGION16":
+        path = MART_WEEKLY_DIR / f"mart_weekly_region16_{label}.parquet"
     elif level == "SUBURB":
         path = MART_WEEKLY_DIR / f"mart_weekly_suburb_{label}.parquet"
     elif level == "POSTCODE":
         path = MART_WEEKLY_DIR / f"mart_weekly_postcode_{label}.parquet"
     else:
         path = MART_WEEKLY_DIR / f"mart_weekly_nsw_{label}.parquet"
+
     if not path.exists():
         return pd.DataFrame()
+
     df = pd.read_parquet(path)
     if "event_week_start" in df.columns:
         df["event_week_start"] = pd.to_datetime(df["event_week_start"], errors="coerce")
@@ -82,39 +695,30 @@ def load_monthly(level: str, label: str) -> pd.DataFrame:
         path = MART_MONTHLY_DIR / f"mart_monthly_nsw_{label}.parquet"
     elif level == "REGION":
         path = MART_MONTHLY_DIR / f"mart_monthly_region_{label}.parquet"
+    elif level == "REGION16":
+        path = MART_MONTHLY_DIR / f"mart_monthly_region16_{label}.parquet"
     elif level == "SUBURB":
         path = MART_MONTHLY_DIR / f"mart_monthly_suburb_{label}.parquet"
     elif level == "POSTCODE":
         path = MART_MONTHLY_DIR / f"mart_monthly_postcode_{label}.parquet"
     else:
         path = MART_MONTHLY_DIR / f"mart_monthly_nsw_{label}.parquet"
+
     if not path.exists():
         return pd.DataFrame()
+
     df = pd.read_parquet(path)
     if "event_month_start" in df.columns:
         df["event_month_start"] = pd.to_datetime(df["event_month_start"], errors="coerce")
     return df
 
 
-# ========== 加载每日滚动 mart (Polars) ==========
 @st.cache_data(show_spinner=False)
 def load_daily_rolling(level: str) -> pl.DataFrame:
     level = _normalize_level(level)
-    if level == "NSW":
-        path = MART_DAILY_ROLLING_DIR / "daily_rolling_nsw.parquet"
-    elif level == "REGION":
-        path = MART_DAILY_ROLLING_DIR / "daily_rolling_region.parquet"
-    elif level == "SUBURB":
-        path = MART_DAILY_ROLLING_DIR / "daily_rolling_suburb.parquet"
-    elif level == "POSTCODE":
-        path = MART_DAILY_ROLLING_DIR / "daily_rolling_postcode.parquet"
-    else:
+    if level not in {"NSW", "REGION", "REGION16", "SUBURB", "POSTCODE"}:
         return pl.DataFrame()
-    if not path.exists():
-        return pl.DataFrame()
-    df = pl.read_parquet(path)
-    df = df.with_columns(pl.col("date").cast(pl.Date))
-    return df
+    return _build_filtered_daily_rolling(level)
 
 
 def _clean_region_series(s: pd.Series) -> pd.Series:
@@ -152,14 +756,17 @@ def load_dim_suburb_postcode() -> pl.DataFrame:
     path = BASE_DIR / "Processed" / "dim" / "dim_suburb_postcode.csv"
     if not path.exists():
         return pl.DataFrame()
+
     df = pl.read_csv(path, schema_overrides={"suburb": pl.Utf8, "postcode": pl.Utf8})
     df = df.with_columns([
         pl.col("suburb").str.strip_chars(),
         pl.col("postcode").str.strip_chars().str.replace(r"\.0$", "").str.zfill(4),
     ])
+
     for c in ["primary_postcode_sales_rows", "suburb_total_sales_rows", "primary_postcode_share"]:
         if c in df.columns:
             df = df.with_columns(pl.col(c).cast(pl.Float64))
+
     df = df.filter(pl.col("suburb").is_not_null() & (pl.col("suburb") != ""))
     df = df.filter(pl.col("postcode").is_not_null() & (pl.col("postcode") != ""))
     return df
@@ -167,11 +774,10 @@ def load_dim_suburb_postcode() -> pl.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def load_dim_postcode_gccsa() -> pl.DataFrame:
-    """加载邮编→大悉尼/新州其他区域映射，仅保留所需列"""
     path = BASE_DIR / "Processed" / "dim" / "dim_postcode_gccsa.csv"
     if not path.exists():
         return pl.DataFrame()
-    # 仅读取需要的列，避免因 postcode_name 列包含非数字导致解析错误
+
     df = pl.read_csv(
         path,
         columns=["postcode", "region_group"],
@@ -181,6 +787,238 @@ def load_dim_postcode_gccsa() -> pl.DataFrame:
         pl.col("postcode").str.strip_chars().str.replace(r"\.0$", "").str.zfill(4),
         pl.col("region_group").str.strip_chars(),
     ])
-    # 过滤掉无效邮编
     df = df.filter(pl.col("postcode").is_not_null() & (pl.col("postcode") != ""))
+    return df
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_global_filtered_fact_sales() -> pl.DataFrame:
+    fact_dir = BASE_DIR / "Processed" / "fact_sales"
+    fact_files = sorted(fact_dir.glob("fact_sales_*.parquet"))
+    if not fact_files:
+        return pl.DataFrame()
+
+    columns = ["suburb", "postcode", "contract_date", "purchase_price", "dwelling_group"]
+    fact = pl.concat(
+        [pl.read_parquet(path, columns=columns) for path in fact_files],
+        how="vertical_relaxed",
+    )
+
+    fact = fact.filter(
+        pl.col("dwelling_group").is_in(["HOUSE", "UNIT"]),
+        pl.col("purchase_price").is_not_null(),
+        pl.col("purchase_price") >= ANALYTICS_PRICE_MIN,
+        pl.col("purchase_price") <= ANALYTICS_PRICE_MAX,
+    )
+    if fact.is_empty():
+        return pl.DataFrame()
+
+    return (
+        fact.with_columns([
+            pl.col("contract_date").cast(pl.Date).alias("date"),
+            _normalize_postcode_expr(pl.col("postcode")).alias("postcode"),
+            pl.col("suburb").cast(pl.Utf8).str.strip_chars().alias("suburb"),
+            pl.col("dwelling_group").cast(pl.Utf8).str.strip_chars().alias("dwelling_group"),
+        ])
+        .filter(pl.col("date").is_not_null())
+        .filter(pl.col("suburb").is_not_null() & (pl.col("suburb") != ""))
+        .select(["suburb", "postcode", "date", "purchase_price", "dwelling_group"])
+    )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_suburb_price_bounds() -> pl.DataFrame:
+    fact = _load_global_filtered_fact_sales()
+    if fact.is_empty():
+        return pl.DataFrame()
+
+    bounds = (
+        fact.group_by(["suburb", "dwelling_group"])
+        .agg([
+            pl.len().alias("history_rows"),
+            pl.col("purchase_price").quantile(ADAPTIVE_PRICE_P5).alias("p5_price"),
+            pl.col("purchase_price").quantile(ADAPTIVE_PRICE_P95).alias("p95_price"),
+        ])
+        .with_columns([
+            pl.max_horizontal(
+                pl.lit(float(ANALYTICS_PRICE_MIN)),
+                pl.col("p5_price") * ADAPTIVE_LOWER_MULTIPLIER,
+            ).alias("local_lower"),
+            pl.min_horizontal(
+                pl.lit(float(ANALYTICS_PRICE_MAX)),
+                pl.col("p95_price") * ADAPTIVE_UPPER_MULTIPLIER,
+            ).alias("local_upper"),
+        ])
+        .with_columns(
+            (
+                (pl.col("history_rows") >= ADAPTIVE_MIN_HISTORY_ROWS)
+                & pl.col("local_lower").is_not_null()
+                & pl.col("local_upper").is_not_null()
+                & (pl.col("local_lower") <= pl.col("local_upper"))
+            ).alias("use_adaptive_band")
+        )
+        .select(["suburb", "dwelling_group", "history_rows", "local_lower", "local_upper", "use_adaptive_band"])
+    )
+    return bounds
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_filtered_fact_sales() -> pl.DataFrame:
+    fact = _load_global_filtered_fact_sales()
+    if fact.is_empty():
+        return pl.DataFrame()
+
+    bounds = load_suburb_price_bounds()
+    if not bounds.is_empty():
+        fact = (
+            fact.join(bounds, on=["suburb", "dwelling_group"], how="left")
+            .filter(
+                pl.col("use_adaptive_band").fill_null(False).not_()
+                | (
+                    (pl.col("purchase_price") >= pl.col("local_lower"))
+                    & (pl.col("purchase_price") <= pl.col("local_upper"))
+                )
+            )
+            .drop(["history_rows", "local_lower", "local_upper", "use_adaptive_band"], strict=False)
+        )
+
+    return fact.select(["suburb", "postcode", "date", "purchase_price", "dwelling_group"])
+
+
+def _build_filtered_daily_rolling(level: str) -> pl.DataFrame:
+    fact = load_filtered_fact_sales()
+    if fact.is_empty():
+        return pl.DataFrame()
+
+    if level == "NSW":
+        scoped = fact.with_columns(pl.lit("NSW").alias("region"))
+    elif level == "REGION":
+        dim_gccsa = load_dim_postcode_gccsa()
+        if dim_gccsa.is_empty():
+            return pl.DataFrame()
+        scoped = (
+            fact.join(
+                dim_gccsa
+                .filter(pl.col("region_group").is_in(list(ALLOWED_REGION_GROUPS)))
+                .select(["postcode", "region_group"])
+                .unique(subset=["postcode"]),
+                on="postcode",
+                how="inner",
+            )
+            .with_columns(pl.col("region_group").alias("region"))
+        )
+    elif level == "REGION16":
+        dim_region16 = load_dim_region16()
+        if dim_region16.is_empty():
+            return pl.DataFrame()
+        scoped = (
+            fact.join(
+                dim_region16.select(["postcode", "region_name"]).unique(subset=["postcode"]),
+                on="postcode",
+                how="inner",
+            )
+            .with_columns(pl.col("region_name").alias("region"))
+        )
+    elif level == "SUBURB":
+        scoped = fact.with_columns(pl.col("suburb").alias("region")).filter(pl.col("suburb") != "")
+    elif level == "POSTCODE":
+        scoped = fact.with_columns(pl.col("postcode").alias("region")).filter(pl.col("postcode") != "")
+    else:
+        return pl.DataFrame()
+
+    scoped = scoped.select(["region", "dwelling_group", "date", "purchase_price"])
+    if scoped.is_empty():
+        return pl.DataFrame()
+
+    max_date = scoped.select(pl.col("date").max()).item()
+    result = (
+        scoped.sort(["region", "dwelling_group", "date"])
+        .group_by_dynamic(
+            index_column="date",
+            every="1d",
+            period="28d",
+            closed="right",
+            label="right",
+            group_by=["region", "dwelling_group"],
+        )
+        .agg([
+            pl.col("purchase_price").median().alias("rolling_median"),
+            pl.col("purchase_price").len().alias("sales_28d"),
+        ])
+        .filter(pl.col("date") <= max_date)
+        .with_columns(
+            pl.when(pl.col("sales_28d") >= 5)
+            .then(pl.col("rolling_median"))
+            .otherwise(None)
+            .alias("rolling_median")
+        )
+        .with_columns([
+            pl.col("rolling_median")
+            .pct_change(28)
+            .over(["region", "dwelling_group"])
+            .alias("mom"),
+            pl.col("rolling_median")
+            .pct_change(84)
+            .over(["region", "dwelling_group"])
+            .alias("qoq"),
+        ])
+        .select(["date", "region", "dwelling_group", "rolling_median", "sales_28d", "mom", "qoq"])
+    )
+    return result.with_columns(pl.col("date").cast(pl.Date))
+
+
+@st.cache_data(show_spinner=False)
+def load_dim_region16() -> pl.DataFrame:
+    path = BASE_DIR / "Processed" / "dim" / "dim_region16_mapping.csv"
+    if not path.exists():
+        return pl.DataFrame()
+
+    df = pl.read_csv(
+        path,
+        schema_overrides={
+            "region_id": pl.Int64,
+            "region_key": pl.Utf8,
+            "region_name": pl.Utf8,
+            "postcode": pl.Utf8,
+            "source_suburbs": pl.Utf8,
+        }
+    )
+
+    required_cols = {"region_id", "region_key", "region_name", "postcode"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"dim_region16_mapping.csv missing required columns: {sorted(missing)}; "
+            f"available columns: {df.columns}"
+        )
+
+    df = df.with_columns([
+        pl.col("region_key").cast(pl.Utf8).str.strip_chars(),
+        pl.col("region_name").cast(pl.Utf8).str.strip_chars(),
+        pl.col("postcode").cast(pl.Utf8).str.strip_chars().str.replace(r"\.0$", "").str.zfill(4),
+        pl.when(pl.col("source_suburbs").is_not_null())
+          .then(pl.col("source_suburbs").cast(pl.Utf8).str.strip_chars())
+          .otherwise(pl.lit(None, dtype=pl.Utf8))
+          .alias("source_suburbs"),
+    ])
+
+    keep_cols = [c for c in ["region_id", "region_key", "region_name", "postcode", "source_suburbs"] if c in df.columns]
+    df = df.select(keep_cols).unique()
+
+    df = df.filter(
+        pl.col("region_key").is_not_null() & (pl.col("region_key") != "") &
+        pl.col("region_name").is_not_null() & (pl.col("region_name") != "") &
+        pl.col("postcode").is_not_null() & (pl.col("postcode") != "")
+    )
+
+    dup_postcodes = (
+        df.group_by("postcode")
+          .agg(pl.len().alias("n"))
+          .filter(pl.col("n") > 1)
+    )
+    if dup_postcodes.height > 0:
+        raise ValueError(
+            "[CONFLICT] Same postcode maps to multiple REGION16 rows in dim_region16_mapping.csv"
+        )
+
     return df
