@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from utils.config import IS_EXTERNAL_MODE
 from utils.data import format_price, get_domain_rent_source_status, load_domain_rent_listings
 from utils.i18n import ensure_lang, tr
 from utils.map_view import resolve_budget_map_view
@@ -16,6 +17,7 @@ from utils.ui import inject_app_theme
 SUBURB_JOIN_ALIASES = {"CESSNOCK WEST": "CESSNOCK", "PATONGA BEACH": "PATONGA"}
 RENT_BUDGET_STEP = 25
 MAP_HEIGHT = 640
+EXTERNAL_MAX_WEEKLY_RENT = 100_000
 
 st.markdown(
     """
@@ -111,6 +113,24 @@ def _property_group_options(df):
 def _subtype_counts(df, group):
     subset = df.loc[df["property_group"] == group, "property_subtype"].fillna("unknown")
     return subset.value_counts().sort_values(ascending=False)
+
+
+def _filter_external_extreme_rents(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    filtered = df.copy()
+    rent_mid = pd.to_numeric(filtered.get("rent_mid"), errors="coerce")
+    rent_min = pd.to_numeric(filtered.get("rent_filter_min"), errors="coerce")
+    rent_max = pd.to_numeric(filtered.get("rent_filter_max"), errors="coerce")
+
+    clear_extreme = rent_mid.gt(EXTERNAL_MAX_WEEKLY_RENT)
+    clear_extreme = clear_extreme.fillna(False)
+
+    no_mid_but_extreme_range = rent_mid.isna() & rent_min.gt(EXTERNAL_MAX_WEEKLY_RENT) & rent_max.gt(EXTERNAL_MAX_WEEKLY_RENT)
+    no_mid_but_extreme_range = no_mid_but_extreme_range.fillna(False)
+
+    return filtered.loc[~(clear_extreme | no_mid_but_extreme_range)].copy()
 
 
 def _format_budget_input(value):
@@ -568,14 +588,15 @@ def _listing_card(row, *, key_prefix):
             st.write(f"{tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}")
             st.write(f"{tr('Available date', 'Available date')}: {_available_date_label(row['available_date'])}")
             st.write(f"{tr('Agency', 'Agency')}: {row['agency_name'] if pd.notna(row['agency_name']) else 'N/A'}")
-            act1, act2 = st.columns(2)
-            with act1:
+            action_cols = st.columns(1 if IS_EXTERNAL_MODE else 2)
+            with action_cols[0]:
                 label = tr("移出 shortlist", "Remove") if str(row["listing_id"]) in _get_shortlist_ids() else tr("加入 shortlist", "Shortlist")
                 if st.button(label, key=f"{key_prefix}_toggle_{row['listing_id']}", use_container_width=True):
                     _toggle_shortlist(str(row["listing_id"]))
                     st.rerun()
-            with act2:
-                st.link_button(tr("打开租盘", "Open listing"), row["url"], use_container_width=True)
+            if not IS_EXTERNAL_MODE:
+                with action_cols[1]:
+                    st.link_button(tr("打开租盘", "Open listing"), row["url"], use_container_width=True)
         with cols[1]:
             if pd.notna(row["main_image"]):
                 st.image(row["main_image"], use_container_width=True)
@@ -614,6 +635,8 @@ def main():
         st.error(tr("未找到可用的 Domain 租盘 parquet 文件。", "No Domain rent parquet file was found."))
         st.code(source_status["path"])
         return
+    if IS_EXTERNAL_MODE:
+        df = _filter_external_extreme_rents(df)
     min_budget, max_budget = _normalise_weekly_bounds(df)
     _ensure_budget_input_state(min_budget, max_budget)
     shortlist_count = len(_get_shortlist_ids())
@@ -693,7 +716,7 @@ def main():
     context_scope = context_rent_listings.loc[context_rent_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else context_rent_listings
     insight = _rent_insight(focused_rent_listings if selected_suburb != "__ALL__" else filtered_rent_listings, context_scope, focused_summary if selected_suburb != "__ALL__" else suburb_summary, focused_suburb=selected_suburb, budget_max=budget_max)
     shortlist_df = df.loc[df["listing_id"].astype(str).isin(_get_shortlist_ids())].copy().sort_values(by=["rent_mid", "suburb", "address"], ascending=[True, True, True], na_position="last")
-    show_debug = str(st.query_params.get("rent_debug", "0")) == "1"
+    show_debug = (not IS_EXTERNAL_MODE) and str(st.query_params.get("rent_debug", "0")) == "1"
     focus_notice = _consume_focus_notice("rent_focus_notice")
     if show_debug:
         with st.expander("Rent Debug", expanded=False):

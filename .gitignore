@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+*.err.log
+*.out.log
+
+# Streamlit / temp html
+chart.html
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local temp folders
+tmp/
+temp/
+
+# Keep raw data out of demo repo
+RawData/DAT/
+
+# Optional caches inside project
+pages/__pycache__/
+utils/__pycache__/
+Reference/ABS/__pycache__/
+
+# Office temp and docs
+~$*.docx
+*.tmp
+*.docx
+
+# Large raw ABS source zip
+Reference/ABS/SAL_2021_AUST_GDA2020_SHP.zip
+
+# Local notes/docs folder
+项目说明/

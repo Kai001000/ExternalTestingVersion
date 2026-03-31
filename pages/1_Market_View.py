@@ -5,12 +5,10 @@ import pandas as pd
 import polars as pl
 import streamlit as st
 
-from pages._ranking_cache import load_ranking_snapshot
 from utils.charts import build_band_chart, build_interactive_chart
-from utils.config import BASE_DIR
+from utils.config import BASE_DIR, IS_EXTERNAL_MODE
 from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales
 from utils.i18n import ensure_lang, t
-from utils.ranking_view import render_rank_table
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_float0, fmt_int, fmt_pct
 from utils.ui import inject_app_theme, sidebar_common
 
@@ -43,6 +41,8 @@ PRICE_BANDS = [
 ]
 BAND_NAMES = [band[2] for band in PRICE_BANDS]
 STABLE_RATIO = 0.6
+LONG_TREND_MIN_MEDIAN_SALES = 20
+LOWER_GEO_LONG_TREND_MIN_MEDIAN_SALES = 5
 TIME_OPTIONS = ["1 Month", "3 Month", "6 Month", "YTD", "1 Year", "3 Year", "5 Year", "10 Year", "Max"]
 LINE_DISPLAY_MODES = [t("display_mode_dual"), t("display_mode_short"), t("display_mode_long")]
 
@@ -994,6 +994,57 @@ def _ensure_default_region(level: str, region_options: list[str]):
         st.session_state[key] = region_options[0]
 
 
+def _pick_default_area_label(
+    daily: pl.DataFrame,
+    region_options: list[str],
+    region_value_map: dict[str, str],
+    *,
+    dwelling: str,
+    start_ts: pd.Timestamp,
+    end_ts: pd.Timestamp,
+) -> str | None:
+    if not region_options or daily.is_empty():
+        return region_options[0] if region_options else None
+
+    visible_regions = set(
+        daily.filter(
+            (pl.col("dwelling_group") == dwelling)
+            & (pl.col("date") >= start_ts)
+            & (pl.col("date") <= end_ts)
+        )["region"].unique().to_list()
+    )
+    if not visible_regions:
+        return region_options[0]
+
+    for label in region_options:
+        value = region_value_map.get(label)
+        if value in visible_regions:
+            return label
+    return region_options[0]
+
+
+def _area_label_has_visible_rows(
+    daily: pl.DataFrame,
+    region_value_map: dict[str, str],
+    label: str | None,
+    *,
+    dwelling: str,
+    start_ts: pd.Timestamp,
+    end_ts: pd.Timestamp,
+) -> bool:
+    if not label:
+        return False
+    value = region_value_map.get(label)
+    if not value:
+        return False
+    return not daily.filter(
+        (pl.col("dwelling_group") == dwelling)
+        & (pl.col("region") == value)
+        & (pl.col("date") >= start_ts)
+        & (pl.col("date") <= end_ts)
+    ).is_empty()
+
+
 def _resolve_region_selection(level: str, region_value_map: dict[str, str]):
     if level == "NSW":
         return ["NSW"], "NSW"
@@ -1015,7 +1066,7 @@ def _render_topbar(badge_date):
 
 
 def _render_page_filter_bar(min_date, max_date):
-    filter_cols = st.columns([1.5, 1.3, 1.1])
+    filter_cols = st.columns([1.5, 1.3, 1.1] if not IS_EXTERNAL_MODE else [1.7, 1.5])
     with filter_cols[0]:
         st.markdown(f'<div class="mv-filter-label">{escape(t("time_range"))}</div>', unsafe_allow_html=True)
         default_preset = TIME_OPTIONS.index("1 Year") if "1 Year" in TIME_OPTIONS else 0
@@ -1024,9 +1075,11 @@ def _render_page_filter_bar(min_date, max_date):
     with filter_cols[1]:
         st.markdown(f'<div class="mv-filter-label">{escape(t("data_level"))}</div>', unsafe_allow_html=True)
         level = st.selectbox(t("data_level"), ["NSW", "REGION", "REGION16", "AREA"], index=0, key="mv_level", label_visibility="collapsed")
-    with filter_cols[2]:
-        st.markdown(f'<div class="mv-filter-label">{escape(t("stable_ratio"))}</div>', unsafe_allow_html=True)
-        stable_ratio = st.slider(t("stable_ratio"), 0.0, 1.0, STABLE_RATIO, 0.05, key="mv_stable_ratio", label_visibility="collapsed")
+    stable_ratio = STABLE_RATIO
+    if not IS_EXTERNAL_MODE:
+        with filter_cols[2]:
+            st.markdown(f'<div class="mv-filter-label">{escape(t("stable_ratio"))}</div>', unsafe_allow_html=True)
+            stable_ratio = st.slider(t("stable_ratio"), 0.0, 1.0, STABLE_RATIO, 0.05, key="mv_stable_ratio", label_visibility="collapsed")
     return level, preset, start_ts, end_ts, stable_ratio
 
 
@@ -1090,18 +1143,100 @@ def _with_underlying_trend(frame: pd.DataFrame, group_cols: list[str]) -> pd.Dat
         tail_col="underlying_trend_tail",
         window_days=91,
     )
-def _with_underlying_trend(frame: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+
+
+def _long_trend_min_median_sales(level: str) -> float:
+    normalized = str(level or "").strip().upper()
+    if normalized in {"AREA", "SUBURB", "POSTCODE"}:
+        return float(LOWER_GEO_LONG_TREND_MIN_MEDIAN_SALES)
+    return float(LONG_TREND_MIN_MEDIAN_SALES)
+
+
+def _with_conditional_underlying_trend(
+    frame: pd.DataFrame,
+    *,
+    group_cols: list[str],
+    sales_col: str = "sales_28d",
+    min_median_sales: float,
+) -> pd.DataFrame:
     if frame is None or frame.empty:
         return pd.DataFrame() if frame is None else frame.copy()
-    return add_underlying_trend(
-        frame,
-        group_cols=group_cols,
-        date_col="event_time",
-        value_col="value",
-        out_col="underlying_trend",
-        tail_col="underlying_trend_tail",
-        window_days=91,
+
+    out = frame.copy()
+    out["underlying_trend"] = np.nan
+    out["underlying_trend_tail"] = False
+    if sales_col not in out.columns:
+        return out
+
+    if not group_cols:
+        eligible = pd.to_numeric(out[sales_col], errors="coerce").median() >= float(min_median_sales)
+        return _with_underlying_trend(out, []) if eligible else out
+
+    sales_median = (
+        out.groupby(group_cols, dropna=False)[sales_col]
+        .median()
+        .reset_index(name="_median_sales_28d")
     )
+    eligible_groups = sales_median.loc[sales_median["_median_sales_28d"] >= float(min_median_sales), group_cols].copy()
+    if eligible_groups.empty:
+        return out
+
+    eligible_frame = out.merge(eligible_groups, on=group_cols, how="inner")
+    if eligible_frame.empty:
+        return out
+
+    eligible_frame = _with_underlying_trend(eligible_frame, group_cols)
+    keep_cols = group_cols + ["event_time", "underlying_trend", "underlying_trend_tail"]
+    out = out.merge(
+        eligible_frame[keep_cols],
+        on=group_cols + ["event_time"],
+        how="left",
+        suffixes=("", "_eligible"),
+    )
+    out["underlying_trend"] = out["underlying_trend_eligible"].combine_first(out["underlying_trend"])
+    out["underlying_trend_tail"] = out["underlying_trend_tail_eligible"].fillna(out["underlying_trend_tail"]).astype(bool)
+    return out.drop(columns=["underlying_trend_eligible", "underlying_trend_tail_eligible"])
+
+
+def _build_market_view_plot_df(
+    df_scope: pd.DataFrame,
+    *,
+    base_sales: dict[str, float],
+    stable_ratio: float,
+    level: str,
+) -> pd.DataFrame:
+    frame = df_scope[["date", "region", "rolling_median", "sales_28d"]].rename(
+        columns={"date": "event_time", "rolling_median": "value"}
+    )
+    frame["event_time"] = pd.to_datetime(frame["event_time"], errors="coerce").dt.normalize()
+    frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
+    frame["sales_28d"] = pd.to_numeric(frame["sales_28d"], errors="coerce")
+    frame["base_sales"] = frame["region"].map(base_sales).fillna(0)
+    frame["raw_stable"] = frame["sales_28d"] >= frame["base_sales"] * stable_ratio
+    frame = frame[frame["event_time"].notna() & frame["value"].notna()].copy()
+
+    # `stable` is a page-level derived flag and should exist for every level.
+    if "stable" not in frame.columns:
+        frame["stable"] = False
+    if not frame.empty:
+        frame = apply_right_edge_stability_rule(frame, ["region"], "event_time", "raw_stable", "stable")
+
+    frame = _with_conditional_underlying_trend(
+        frame,
+        group_cols=["region"] if level != "NSW" else [],
+        min_median_sales=_long_trend_min_median_sales(level),
+    )
+
+    return frame
+
+
+def _build_market_view_stable_lookup(plot_df_all: pd.DataFrame) -> pd.DataFrame:
+    if plot_df_all.empty:
+        return pd.DataFrame(columns=["event_time", "region", "stable"])
+    stable_lookup = plot_df_all.copy()
+    if "stable" not in stable_lookup.columns:
+        stable_lookup["stable"] = False
+    return stable_lookup[["event_time", "region", "stable"]].drop_duplicates()
 
 
 def main():
@@ -1128,6 +1263,24 @@ def main():
     current_daily = current_daily.with_columns(pl.col("region").cast(pl.Utf8).str.strip_chars())
     region_options, region_value_map = _resolve_region_options(level, current_daily)
     _ensure_default_region(level, region_options)
+    if level == "AREA" and region_options:
+        area_key = "mv_chart_region_area"
+        if not _area_label_has_visible_rows(
+            current_daily,
+            region_value_map,
+            st.session_state.get(area_key),
+            dwelling=dwelling,
+            start_ts=start_ts,
+            end_ts=end_ts,
+        ):
+            st.session_state[area_key] = _pick_default_area_label(
+                current_daily,
+                region_options,
+                region_value_map,
+                dwelling=dwelling,
+                start_ts=start_ts,
+                end_ts=end_ts,
+            )
     regions_selected, region_label = _resolve_region_selection(level, region_value_map)
     with st.spinner(t("loading_market_view")):
         daily = current_daily
@@ -1147,16 +1300,16 @@ def main():
         base_df = daily.filter((pl.col("dwelling_group") == dwelling) & (pl.col("date") >= one_year_ago)).to_pandas()
         base_sales = base_df.groupby("region")["sales_28d"].median().to_dict()
 
-        plot_df_all = df_scope[["date", "region", "rolling_median", "sales_28d"]].rename(columns={"date": "event_time", "rolling_median": "value"})
-        plot_df_all = plot_df_all[plot_df_all["value"].notna()].copy()
-        plot_df_all["base_sales"] = plot_df_all["region"].map(base_sales).fillna(0)
-        plot_df_all["raw_stable"] = plot_df_all["sales_28d"] >= plot_df_all["base_sales"] * stable_ratio
-        plot_df_all = apply_right_edge_stability_rule(plot_df_all, ["region"], "event_time", "raw_stable", "stable")
-        if level in {"NSW", "REGION", "REGION16"}:
-            plot_df_all = _with_underlying_trend(plot_df_all, ["region"] if level != "NSW" else [])
+        plot_df_all = _build_market_view_plot_df(
+            df_scope,
+            base_sales=base_sales,
+            stable_ratio=stable_ratio,
+            level=level,
+        )
+        stable_lookup = _build_market_view_stable_lookup(plot_df_all)
 
         summary_full_df = df_scope[["date", "region", "rolling_median", "sales_28d"]].merge(
-            plot_df_all[["event_time", "region", "stable"]].drop_duplicates(),
+            stable_lookup,
             left_on=["date", "region"],
             right_on=["event_time", "region"],
             how="left",
@@ -1181,10 +1334,9 @@ def main():
                 if level == "NSW":
                     st.text_input(t("region"), value="NSW", disabled=True, label_visibility="collapsed", key="mv_chart_region_nsw")
                 elif level in {"REGION", "REGION16"}:
-                    st.selectbox(t("region"), options=region_options, index=region_options.index(regions_selected[0]) if regions_selected else 0, key=f"mv_chart_region_{level.lower()}", label_visibility="collapsed")
+                    st.selectbox(t("region"), options=region_options, key=f"mv_chart_region_{level.lower()}", label_visibility="collapsed")
                 else:
-                    default_index = region_options.index(region_label) if region_label in region_options else None
-                    st.selectbox(t("region"), options=region_options, index=default_index, key="mv_chart_region_area", label_visibility="collapsed", placeholder=t("search_suburb_or_postcode"))
+                    st.selectbox(t("region"), options=region_options, key="mv_chart_region_area", label_visibility="collapsed", placeholder=t("search_suburb_or_postcode"))
             with header_cols[2]:
                 st.markdown(f'<div class="mv-filter-label">{escape(t("display_mode"))}</div>', unsafe_allow_html=True)
                 chart_display_mode = st.selectbox(t("display_mode"), LINE_DISPLAY_MODES, index=0, key="mv_chart_display_mode", label_visibility="collapsed")
@@ -1197,7 +1349,7 @@ def main():
                 sales_col="sales_28d",
                 sales_title=t("sales_28d"),
                 stable_col="stable",
-                trend_col="underlying_trend" if level in {"NSW", "REGION", "REGION16"} else None,
+                trend_col="underlying_trend",
                 display_mode=chart_display_mode,
             )
             st.plotly_chart(chart, use_container_width=True, config={"displayModeBar": False, "responsive": True})
@@ -1274,36 +1426,5 @@ def main():
                             """,
                             unsafe_allow_html=True,
                         )
-        st.markdown(
-            f'<div class="mv-section-title">{escape(t("stable_movers"))}</div>'
-            f'<div class="mv-section-subtitle">{escape(t("stable_movers_note"))}</div>',
-            unsafe_allow_html=True,
-        )
-        stable_snapshot = load_ranking_snapshot(dwelling, "stable", stable_ratio)
-        if stable_snapshot.empty:
-            st.info(t("market_view_no_stable_ranking"))
-            return
-
-        rank_cols = st.columns(2)
-        for slot, card_title, ascending in [(rank_cols[0], t("stable_gainers"), False), (rank_cols[1], t("stable_losers"), True)]:
-            with slot:
-                rank_card = st.container(border=True)
-                with rank_card:
-                    st.markdown(f'<div class="mv-section-title">{escape(card_title)}</div>', unsafe_allow_html=True)
-                    metric = "Stable YoY"
-                    metric_df = stable_snapshot.dropna(subset=[metric, "28d median"]).copy()
-                    metric_df = metric_df.sort_values(metric, ascending=ascending)
-                    metric_df = metric_df[metric_df[metric] < 0] if ascending else metric_df[metric_df[metric] > 0]
-                    render_rank_table(
-                        metric_df.reset_index(drop=True),
-                        metric,
-                        include_asof=False,
-                        stable_mode=True,
-                        limit=10,
-                        height=390,
-                        empty_message=t("ranking_empty"),
-                    )
-
-
 if __name__ == "__main__":
     main()

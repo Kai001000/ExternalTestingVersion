@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from utils.config import IS_EXTERNAL_MODE
 from utils.data import format_price, get_domain_listing_source_status, load_domain_sale_listings
 from utils.i18n import ensure_lang, tr
 from utils.map_view import resolve_budget_map_view
@@ -1131,36 +1132,37 @@ def _build_map(filtered: pd.DataFrame, suburb_summary: pd.DataFrame, selected_su
         _set_selected_suburb(picked_suburb)
         st.rerun()
 
-    if not boundaries["available"]:
-        st.caption(
-            tr(
-                f"未找到官方 suburb 边界文件，当前使用 suburb 中心点替代热力面。可将 GeoJSON 放入 {boundaries['path']} 以启用完整 choropleth。",
-                f"Official suburb boundaries were not found, so the map is using suburb centroids instead of filled polygons. Add a GeoJSON at {boundaries['path']} to enable the full choropleth.",
-            )
-        )
-    elif not choropleth_ready:
-        st.warning(
-            tr(
-                f"Suburb 边界文件已加载，但当前 join 覆盖不足以安全启用 choropleth。NSW polygon: {polygon_count}，listing suburb: {len(map_summary)}，成功 join: {joined_suburbs}。未匹配示例：{', '.join(unmatched_examples) if unmatched_examples else 'N/A'}。",
-                f"The suburb boundary file loaded, but join coverage is too weak to safely enable the choropleth. NSW polygons: {polygon_count}, listing suburbs: {len(map_summary)}, successful joins: {joined_suburbs}. Unmatched examples: {', '.join(unmatched_examples) if unmatched_examples else 'N/A'}.",
-            )
-        )
-    elif not map_summary.empty and "boundary_latitude" in map_summary.columns:
-        st.caption(
-            tr(
-                f"颜色表示当前 suburb 里预算内标价房源的多少：越绿代表预算内选择越多；越浅代表预算内标价房源更少。若一个 suburb 有较多未定价房源，颜色会更保守。当前 join: {joined_suburbs}/{len(map_summary)}（{join_rate:.0%}），未匹配示例：{', '.join(unmatched_examples) if unmatched_examples else '无'}。",
-                f"Color shows how many priced in-budget options are available in each suburb: greener means more in-budget choice, lighter means fewer priced matches. If a suburb has many unknown-price listings, the color stays more conservative. Current join: {joined_suburbs}/{len(map_summary)} ({join_rate:.0%}), unmatched examples: {', '.join(unmatched_examples) if unmatched_examples else 'none'}.",
-            )
-        )
-        if locality_unmatched or ignorable_unmatched or unresolved_unmatched:
+    if not IS_EXTERNAL_MODE:
+        if not boundaries["available"]:
             st.caption(
                 tr(
-                    f"未匹配分类：地名变体 {', '.join(locality_unmatched) if locality_unmatched else '无'}；可忽略 {', '.join(ignorable_unmatched) if ignorable_unmatched else '无'}；仍待处理 {', '.join(unresolved_unmatched) if unresolved_unmatched else '无'}。",
-                    f"Unmatched classification: locality variants {', '.join(locality_unmatched) if locality_unmatched else 'none'}; ignorable {', '.join(ignorable_unmatched) if ignorable_unmatched else 'none'}; still unresolved {', '.join(unresolved_unmatched) if unresolved_unmatched else 'none'}.",
+                    f"未找到官方 suburb 边界文件，当前使用 suburb 中心点替代热力面。可将 GeoJSON 放入 {boundaries['path']} 以启用完整 choropleth。",
+                    f"Official suburb boundaries were not found, so the map is using suburb centroids instead of filled polygons. Add a GeoJSON at {boundaries['path']} to enable the full choropleth.",
                 )
             )
-    if sampled:
-        st.caption(tr("当前 suburb 的房源点位优先展示最多 350 个更适合浏览的结果，以保持地图响应速度。", "Listing markers are capped to the first 350 browse-worthy results in the focused suburb to keep the map responsive."))
+        elif not choropleth_ready:
+            st.warning(
+                tr(
+                    f"Suburb 边界文件已加载，但当前 join 覆盖不足以安全启用 choropleth。NSW polygon: {polygon_count}，listing suburb: {len(map_summary)}，成功 join: {joined_suburbs}。未匹配示例：{', '.join(unmatched_examples) if unmatched_examples else 'N/A'}。",
+                    f"The suburb boundary file loaded, but join coverage is too weak to safely enable the choropleth. NSW polygons: {polygon_count}, listing suburbs: {len(map_summary)}, successful joins: {joined_suburbs}. Unmatched examples: {', '.join(unmatched_examples) if unmatched_examples else 'N/A'}.",
+                )
+            )
+        elif not map_summary.empty and "boundary_latitude" in map_summary.columns:
+            st.caption(
+                tr(
+                    f"颜色表示当前 suburb 里预算内标价房源的多少：越绿代表预算内选择越多；越浅代表预算内标价房源更少。若一个 suburb 有较多未定价房源，颜色会更保守。当前 join: {joined_suburbs}/{len(map_summary)}（{join_rate:.0%}），未匹配示例：{', '.join(unmatched_examples) if unmatched_examples else '无'}。",
+                    f"Color shows how many priced in-budget options are available in each suburb: greener means more in-budget choice, lighter means fewer priced matches. If a suburb has many unknown-price listings, the color stays more conservative. Current join: {joined_suburbs}/{len(map_summary)} ({join_rate:.0%}), unmatched examples: {', '.join(unmatched_examples) if unmatched_examples else 'none'}.",
+                )
+            )
+            if locality_unmatched or ignorable_unmatched or unresolved_unmatched:
+                st.caption(
+                    tr(
+                        f"未匹配分类：地名变体 {', '.join(locality_unmatched) if locality_unmatched else '无'}；可忽略 {', '.join(ignorable_unmatched) if ignorable_unmatched else '无'}；仍待处理 {', '.join(unresolved_unmatched) if unresolved_unmatched else '无'}。",
+                        f"Unmatched classification: locality variants {', '.join(locality_unmatched) if locality_unmatched else 'none'}; ignorable {', '.join(ignorable_unmatched) if ignorable_unmatched else 'none'}; still unresolved {', '.join(unresolved_unmatched) if unresolved_unmatched else 'none'}.",
+                    )
+                )
+        if sampled:
+            st.caption(tr("当前 suburb 的房源点位优先展示最多 350 个更适合浏览的结果，以保持地图响应速度。", "Listing markers are capped to the first 350 browse-worthy results in the focused suburb to keep the map responsive."))
 
     return selected_suburb
 
@@ -1176,14 +1178,15 @@ def _listing_card(row: pd.Series, *, key_prefix: str) -> None:
             st.write(f"{tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}")
             st.write(f"{tr('Land size', 'Land size')}: {_land_size_label(row['land_size'])}")
             st.write(f"{tr('Agency', 'Agency')}: {row['agency_name'] if pd.notna(row['agency_name']) else 'N/A'}")
-            act1, act2 = st.columns(2)
-            with act1:
+            action_cols = st.columns(1 if IS_EXTERNAL_MODE else 2)
+            with action_cols[0]:
                 label = tr("移出 shortlist", "Remove") if str(row["listing_id"]) in _get_shortlist_ids() else tr("加入 shortlist", "Shortlist")
                 if st.button(label, key=f"{key_prefix}_toggle_{row['listing_id']}", use_container_width=True):
                     _toggle_shortlist(str(row["listing_id"]))
                     st.rerun()
-            with act2:
-                st.link_button(tr("打开房源", "Open listing"), row["url"], use_container_width=True)
+            if not IS_EXTERNAL_MODE:
+                with action_cols[1]:
+                    st.link_button(tr("打开房源", "Open listing"), row["url"], use_container_width=True)
         with cols[1]:
             if pd.notna(row["main_image"]):
                 st.image(row["main_image"], use_container_width=True)
@@ -1457,7 +1460,7 @@ def main() -> None:
     insight = _budget_insight(insight_scope, context_scope, budget_max, focused_suburb=selected_suburb)
     shortlist_df = df.loc[df["listing_id"].astype(str).isin(_get_shortlist_ids())].copy()
     shortlist_df = shortlist_df.sort_values(by=["price_mid", "suburb", "address"], ascending=[True, True, True], na_position="last")
-    show_debug = str(st.query_params.get("budget_debug", "0")) == "1"
+    show_debug = (not IS_EXTERNAL_MODE) and str(st.query_params.get("budget_debug", "0")) == "1"
     focus_notice = _consume_focus_notice("budget_focus_notice")
 
     if show_debug:
@@ -1535,17 +1538,27 @@ def main() -> None:
                 st.rerun()
 
         with st.expander(tr("打开 shortlist 工作区", "Open shortlist workspace"), expanded=shortlist_count > 0):
-            review_tab, compare_tab, export_tab = st.tabs([
-                tr("已选房源", "Review"),
-                tr("对比", "Compare"),
-                tr("摘要", "Export Summary"),
-            ])
-            with review_tab:
-                _render_shortlist_panel(shortlist_df)
-            with compare_tab:
-                _render_comparison_table(shortlist_df)
-            with export_tab:
-                _render_shortlist_summary(shortlist_df)
+            if IS_EXTERNAL_MODE:
+                review_tab, compare_tab = st.tabs([
+                    tr("已选房源", "Review"),
+                    tr("对比", "Compare"),
+                ])
+                with review_tab:
+                    _render_shortlist_panel(shortlist_df)
+                with compare_tab:
+                    _render_comparison_table(shortlist_df)
+            else:
+                review_tab, compare_tab, export_tab = st.tabs([
+                    tr("已选房源", "Review"),
+                    tr("对比", "Compare"),
+                    tr("摘要", "Export Summary"),
+                ])
+                with review_tab:
+                    _render_shortlist_panel(shortlist_df)
+                with compare_tab:
+                    _render_comparison_table(shortlist_df)
+                with export_tab:
+                    _render_shortlist_summary(shortlist_df)
 
 
 if __name__ == "__main__":

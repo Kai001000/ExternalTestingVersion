@@ -1,0 +1,214 @@
+region_id,region_key,region_name,postcode,suburb_raw,suburb_key,in_mapping,would_be_extra_if_postcode_only
+1,cbd_inner_city,CBD / Inner City,2000,BARANGAROO,barangaroo,False,True
+1,cbd_inner_city,CBD / Inner City,2000,DAWES POINT,dawes_point,False,True
+1,cbd_inner_city,CBD / Inner City,2000,HAYMARKET,haymarket,True,False
+1,cbd_inner_city,CBD / Inner City,2000,MILLERS POINT,millers_point,False,True
+1,cbd_inner_city,CBD / Inner City,2000,SYDNEY,sydney,True,False
+1,cbd_inner_city,CBD / Inner City,2000,THE ROCKS,the_rocks,False,True
+1,cbd_inner_city,CBD / Inner City,2007,ULTIMO,ultimo,True,False
+1,cbd_inner_city,CBD / Inner City,2008,CHIPPENDALE,chippendale,True,False
+1,cbd_inner_city,CBD / Inner City,2008,DARLINGTON,darlington,False,True
+1,cbd_inner_city,CBD / Inner City,2009,PYRMONT,pyrmont,True,False
+1,cbd_inner_city,CBD / Inner City,2010,DARLINGHURST,darlinghurst,True,False
+1,cbd_inner_city,CBD / Inner City,2010,SURRY HILLS,surry_hills,True,False
+1,cbd_inner_city,CBD / Inner City,2011,ELIZABETH BAY,elizabeth_bay,False,True
+1,cbd_inner_city,CBD / Inner City,2011,POTTS POINT,potts_point,True,False
+1,cbd_inner_city,CBD / Inner City,2011,RUSHCUTTERS BAY,rushcutters_bay,False,True
+1,cbd_inner_city,CBD / Inner City,2011,WOOLLOOMOOLOO,woolloomooloo,True,False
+2,inner_south,Inner South,2015,ALEXANDRIA,alexandria,True,False
+2,inner_south,Inner South,2015,BEACONSFIELD,beaconsfield,False,True
+2,inner_south,Inner South,2015,EVELEIGH,eveleigh,False,True
+2,inner_south,Inner South,2016,REDFERN,redfern,True,False
+2,inner_south,Inner South,2017,WATERLOO,waterloo,False,True
+2,inner_south,Inner South,2017,ZETLAND,zetland,True,False
+2,inner_south,Inner South,2018,EASTLAKES,eastlakes,False,True
+2,inner_south,Inner South,2018,ROSEBERY,rosebery,True,False
+2,inner_south,Inner South,2020,MASCOT,mascot,True,False
+3,eastern_suburbs,Eastern Suburbs,2023,BELLEVUE HILL,bellevue_hill,True,False
+3,eastern_suburbs,Eastern Suburbs,2025,WOOLLAHRA,woollahra,True,False
+3,eastern_suburbs,Eastern Suburbs,2026,BONDI,bondi,True,False
+3,eastern_suburbs,Eastern Suburbs,2026,BONDI BEACH,bondi_beach,False,True
+3,eastern_suburbs,Eastern Suburbs,2026,NORTH BONDI,north_bondi,False,True
+3,eastern_suburbs,Eastern Suburbs,2026,TAMARAMA,tamarama,False,True
+3,eastern_suburbs,Eastern Suburbs,2028,DOUBLE BAY,double_bay,True,False
+3,eastern_suburbs,Eastern Suburbs,2029,ROSE BAY,rose_bay,True,False
+3,eastern_suburbs,Eastern Suburbs,2030,DOVER HEIGHTS,dover_heights,False,True
+3,eastern_suburbs,Eastern Suburbs,2030,VAUCLUSE,vaucluse,True,False
+3,eastern_suburbs,Eastern Suburbs,2030,WATSONS BAY,watsons_bay,False,True
+3,eastern_suburbs,Eastern Suburbs,2031,CLOVELLY,clovelly,False,True
+3,eastern_suburbs,Eastern Suburbs,2031,RANDWICK,randwick,True,False
+3,eastern_suburbs,Eastern Suburbs,2034,COOGEE,coogee,True,False
+3,eastern_suburbs,Eastern Suburbs,2034,SOUTH COOGEE,south_coogee,False,True
+3,eastern_suburbs,Eastern Suburbs,2035,MAROUBRA,maroubra,True,False
+3,eastern_suburbs,Eastern Suburbs,2035,PAGEWOOD,pagewood,False,True
+4,inner_west,Inner West,2042,ENMORE,enmore,False,True
+4,inner_west,Inner West,2042,NEWTOWN,newtown,True,False
+4,inner_west,Inner West,2131,ASHFIELD,ashfield,True,False
+4,inner_west,Inner West,2134,BURWOOD,burwood,True,False
+4,inner_west,Inner West,2204,MARRICKVILLE,marrickville,True,False
+5,lower_north_shore,Lower North Shore,2060,LAVENDER BAY,lavender_bay,False,True
+5,lower_north_shore,Lower North Shore,2060,MCMAHONS POINT,mcmahons_point,False,True
+5,lower_north_shore,Lower North Shore,2060,NORTH SYDNEY,north_sydney,True,False
+5,lower_north_shore,Lower North Shore,2060,WAVERTON,waverton,False,True
+5,lower_north_shore,Lower North Shore,2061,KIRRIBILLI,kirribilli,True,False
+5,lower_north_shore,Lower North Shore,2061,MILSONS POINT,milsons_point,False,True
+5,lower_north_shore,Lower North Shore,2067,CHATSWOOD,chatswood,True,False
+5,lower_north_shore,Lower North Shore,2067,CHATSWOOD WEST,chatswood_west,False,True
+5,lower_north_shore,Lower North Shore,2088,MOSMAN,mosman,True,False
+5,lower_north_shore,Lower North Shore,2089,KURRABA POINT,kurraba_point,False,True
+5,lower_north_shore,Lower North Shore,2089,NEUTRAL BAY,neutral_bay,True,False
+5,lower_north_shore,Lower North Shore,2090,CREMORNE,cremorne,True,False
+5,lower_north_shore,Lower North Shore,2090,CREMORNE POINT,cremorne_point,False,True
+6,upper_north_shore,Upper North Shore,2070,EAST LINDFIELD,east_lindfield,False,True
+6,upper_north_shore,Upper North Shore,2070,LINDFIELD,lindfield,True,False
+6,upper_north_shore,Upper North Shore,2071,EAST KILLARA,east_killara,False,True
+6,upper_north_shore,Upper North Shore,2071,KILLARA,killara,True,False
+6,upper_north_shore,Upper North Shore,2072,GORDON,gordon,True,False
+6,upper_north_shore,Upper North Shore,2074,NORTH TURRAMURRA,north_turramurra,False,True
+6,upper_north_shore,Upper North Shore,2074,SOUTH TURRAMURRA,south_turramurra,False,True
+6,upper_north_shore,Upper North Shore,2074,TURRAMURRA,turramurra,True,False
+6,upper_north_shore,Upper North Shore,2074,WARRAWEE,warrawee,False,True
+6,upper_north_shore,Upper North Shore,2077,ASQUITH,asquith,False,True
+6,upper_north_shore,Upper North Shore,2077,HORNSBY,hornsby,True,False
+6,upper_north_shore,Upper North Shore,2077,HORNSBY HEIGHTS,hornsby_heights,False,True
+6,upper_north_shore,Upper North Shore,2077,WAITARA,waitara,False,True
+7,northern_beaches,Northern Beaches,2095,MANLY,manly,True,False
+7,northern_beaches,Northern Beaches,2099,CROMER,cromer,False,True
+7,northern_beaches,Northern Beaches,2099,DEE WHY,dee_why,True,False
+7,northern_beaches,Northern Beaches,2099,NARRAWEENA,narraweena,False,True
+7,northern_beaches,Northern Beaches,2099,NORTH CURL CURL,north_curl_curl,False,True
+7,northern_beaches,Northern Beaches,2103,MONA VALE,mona_vale,True,False
+8,hills_district,Hills District,2154,CASTLE HILL,castle_hill,True,False
+8,hills_district,Hills District,2155,BEAUMONT HILLS,beaumont_hills,False,True
+8,hills_district,Hills District,2155,KELLYVILLE,kellyville,True,False
+8,hills_district,Hills District,2155,KELLYVILLE RIDGE,kellyville_ridge,False,True
+8,hills_district,Hills District,2155,NORTH KELLYVILLE,north_kellyville,False,True
+8,hills_district,Hills District,2155,ROUSE HILL,rouse_hill,True,False
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2112,DENISTONE EAST,denistone_east,False,True
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2112,PUTNEY,putney,False,True
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2112,RYDE,ryde,True,False
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2113,EAST RYDE,east_ryde,False,True
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2113,MACQUARIE PARK,macquarie_park,True,False
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2113,NORTH RYDE,north_ryde,False,True
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2121,EPPING,epping,True,False
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2121,NORTH EPPING,north_epping,False,True
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2122,EASTWOOD,eastwood,True,False
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,2122,MARSFIELD,marsfield,False,True
+10,parramatta_central_west,Parramatta / Central West,2142,GRANVILLE,granville,True,False
+10,parramatta_central_west,Parramatta / Central West,2142,HOLROYD,holroyd,False,True
+10,parramatta_central_west,Parramatta / Central West,2142,ROSEHILL,rosehill,False,True
+10,parramatta_central_west,Parramatta / Central West,2142,SOUTH GRANVILLE,south_granville,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,CONSTITUTION HILL,constitution_hill,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,GIRRAWEEN,girraween,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,GREYSTANES,greystanes,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,MAYS HILL,mays_hill,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,PEMULWUY,pemulwuy,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,PENDLE HILL,pendle_hill,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,SOUTH WENTWORTHVILLE,south_wentworthville,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,WENTWORTHVILLE,wentworthville,False,True
+10,parramatta_central_west,Parramatta / Central West,2145,WESTMEAD,westmead,True,False
+10,parramatta_central_west,Parramatta / Central West,2150,HARRIS PARK,harris_park,False,True
+10,parramatta_central_west,Parramatta / Central West,2150,PARRAMATTA,parramatta,True,False
+11,western_sydney,Western Sydney,2148,BLACKTOWN,blacktown,True,False
+11,western_sydney,Western Sydney,2148,KINGS PARK,kings_park,False,True
+11,western_sydney,Western Sydney,2148,MARAYONG,marayong,False,True
+11,western_sydney,Western Sydney,2148,PROSPECT,prospect,False,True
+11,western_sydney,Western Sydney,2750,EMU HEIGHTS,emu_heights,False,True
+11,western_sydney,Western Sydney,2750,EMU PLAINS,emu_plains,False,True
+11,western_sydney,Western Sydney,2750,JAMISONTOWN,jamisontown,False,True
+11,western_sydney,Western Sydney,2750,LEONAY,leonay,False,True
+11,western_sydney,Western Sydney,2750,PENRITH,penrith,True,False
+11,western_sydney,Western Sydney,2750,SOUTH PENRITH,south_penrith,False,True
+11,western_sydney,Western Sydney,2770,BIDWILL,bidwill,False,True
+11,western_sydney,Western Sydney,2770,BLACKETT,blackett,False,True
+11,western_sydney,Western Sydney,2770,DHARRUK,dharruk,False,True
+11,western_sydney,Western Sydney,2770,EMERTON,emerton,False,True
+11,western_sydney,Western Sydney,2770,HEBERSHAM,hebersham,False,True
+11,western_sydney,Western Sydney,2770,LETHBRIDGE PARK,lethbridge_park,False,True
+11,western_sydney,Western Sydney,2770,MINCHINBURY,minchinbury,False,True
+11,western_sydney,Western Sydney,2770,MOUNT DRUITT,mount_druitt,True,False
+11,western_sydney,Western Sydney,2770,SHALVEY,shalvey,False,True
+11,western_sydney,Western Sydney,2770,TREGEAR,tregear,False,True
+11,western_sydney,Western Sydney,2770,WHALAN,whalan,False,True
+11,western_sydney,Western Sydney,2770,WILLMOT,willmot,False,True
+12,canterbury_bankstown,Canterbury-Bankstown,2194,CAMPSIE,campsie,True,False
+12,canterbury_bankstown,Canterbury-Bankstown,2195,LAKEMBA,lakemba,True,False
+12,canterbury_bankstown,Canterbury-Bankstown,2195,WILEY PARK,wiley_park,False,True
+12,canterbury_bankstown,Canterbury-Bankstown,2200,BANKSTOWN,bankstown,True,False
+12,canterbury_bankstown,Canterbury-Bankstown,2200,CONDELL PARK,condell_park,False,True
+13,st_george,St George,2216,BANKSIA,banksia,False,True
+13,st_george,St George,2216,BRIGHTON-LE-SANDS,brighton_le_sands,False,True
+13,st_george,St George,2216,KYEEMAGH,kyeemagh,False,True
+13,st_george,St George,2216,ROCKDALE,rockdale,True,False
+13,st_george,St George,2217,BEVERLEY PARK,beverley_park,False,True
+13,st_george,St George,2217,KOGARAH,kogarah,True,False
+13,st_george,St George,2217,KOGARAH BAY,kogarah_bay,False,True
+13,st_george,St George,2217,MONTEREY,monterey,False,True
+13,st_george,St George,2217,RAMSGATE,ramsgate,False,True
+13,st_george,St George,2217,RAMSGATE BEACH,ramsgate_beach,False,True
+13,st_george,St George,2220,HURSTVILLE,hurstville,True,False
+13,st_george,St George,2220,HURSTVILLE GROVE,hurstville_grove,False,True
+14,south_west_sydney,South West Sydney,2165,FAIRFIELD,fairfield,True,False
+14,south_west_sydney,South West Sydney,2165,FAIRFIELD EAST,fairfield_east,False,True
+14,south_west_sydney,South West Sydney,2165,FAIRFIELD HEIGHTS,fairfield_heights,False,True
+14,south_west_sydney,South West Sydney,2165,FAIRFIELD WEST,fairfield_west,False,True
+14,south_west_sydney,South West Sydney,2166,CABRAMATTA,cabramatta,True,False
+14,south_west_sydney,South West Sydney,2166,CABRAMATTA WEST,cabramatta_west,False,True
+14,south_west_sydney,South West Sydney,2166,CANLEY HEIGHTS,canley_heights,False,True
+14,south_west_sydney,South West Sydney,2166,CANLEY VALE,canley_vale,False,True
+14,south_west_sydney,South West Sydney,2166,LANSVALE,lansvale,False,True
+14,south_west_sydney,South West Sydney,2170,CASULA,casula,False,True
+14,south_west_sydney,South West Sydney,2170,CHIPPING NORTON,chipping_norton,False,True
+14,south_west_sydney,South West Sydney,2170,HAMMONDVILLE,hammondville,False,True
+14,south_west_sydney,South West Sydney,2170,LIVERPOOL,liverpool,True,False
+14,south_west_sydney,South West Sydney,2170,LURNEA,lurnea,False,True
+14,south_west_sydney,South West Sydney,2170,MOOREBANK,moorebank,False,True
+14,south_west_sydney,South West Sydney,2170,MOUNT PRITCHARD,mount_pritchard,False,True
+14,south_west_sydney,South West Sydney,2170,PRESTONS,prestons,False,True
+14,south_west_sydney,South West Sydney,2170,WARWICK FARM,warwick_farm,False,True
+15,macarthur,Macarthur,2560,AIRDS,airds,False,True
+15,macarthur,Macarthur,2560,AMBARVALE,ambarvale,False,True
+15,macarthur,Macarthur,2560,APPIN,appin,False,True
+15,macarthur,Macarthur,2560,BLAIR ATHOL,blair_athol,False,True
+15,macarthur,Macarthur,2560,BRADBURY,bradbury,False,True
+15,macarthur,Macarthur,2560,CAMPBELLTOWN,campbelltown,True,False
+15,macarthur,Macarthur,2560,ENGLORIE PARK,englorie_park,False,True
+15,macarthur,Macarthur,2560,GILEAD,gilead,False,True
+15,macarthur,Macarthur,2560,GLEN ALPINE,glen_alpine,False,True
+15,macarthur,Macarthur,2560,KENTLYN,kentlyn,False,True
+15,macarthur,Macarthur,2560,LEUMEAH,leumeah,False,True
+15,macarthur,Macarthur,2560,ROSEMEADOW,rosemeadow,False,True
+15,macarthur,Macarthur,2560,RUSE,ruse,False,True
+15,macarthur,Macarthur,2560,ST HELENS PARK,st_helens_park,False,True
+15,macarthur,Macarthur,2560,WOODBINE,woodbine,False,True
+15,macarthur,Macarthur,2570,BELIMBLA PARK,belimbla_park,False,True
+15,macarthur,Macarthur,2570,CAMDEN,camden,True,False
+15,macarthur,Macarthur,2570,CAMDEN PARK,camden_park,False,True
+15,macarthur,Macarthur,2570,CAMDEN SOUTH,camden_south,False,True
+15,macarthur,Macarthur,2570,COBBITTY,cobbitty,False,True
+15,macarthur,Macarthur,2570,ELDERSLIE,elderslie,False,True
+15,macarthur,Macarthur,2570,ELLIS LANE,ellis_lane,False,True
+15,macarthur,Macarthur,2570,GRASMERE,grasmere,False,True
+15,macarthur,Macarthur,2570,MOUNT HUNTER,mount_hunter,False,True
+15,macarthur,Macarthur,2570,NATTAI,nattai,False,True
+15,macarthur,Macarthur,2570,OAKDALE,oakdale,False,True
+15,macarthur,Macarthur,2570,ORAN PARK,oran_park,True,False
+15,macarthur,Macarthur,2570,ORANGEVILLE,orangeville,False,True
+15,macarthur,Macarthur,2570,SPRING FARM,spring_farm,False,True
+15,macarthur,Macarthur,2570,THE OAKS,the_oaks,False,True
+15,macarthur,Macarthur,2570,THERESA PARK,theresa_park,False,True
+15,macarthur,Macarthur,2570,WEROMBI,werombi,False,True
+16,sutherland_shire,Sutherland Shire,2228,MIRANDA,miranda,True,False
+16,sutherland_shire,Sutherland Shire,2228,YOWIE BAY,yowie_bay,False,True
+16,sutherland_shire,Sutherland Shire,2229,CARINGBAH,caringbah,True,False
+16,sutherland_shire,Sutherland Shire,2229,CARINGBAH SOUTH,caringbah_south,False,True
+16,sutherland_shire,Sutherland Shire,2229,DOLANS BAY,dolans_bay,False,True
+16,sutherland_shire,Sutherland Shire,2229,LILLI PILLI,lilli_pilli,False,True
+16,sutherland_shire,Sutherland Shire,2229,PORT HACKING,port_hacking,False,True
+16,sutherland_shire,Sutherland Shire,2229,TAREN POINT,taren_point,False,True
+16,sutherland_shire,Sutherland Shire,2230,BUNDEENA,bundeena,False,True
+16,sutherland_shire,Sutherland Shire,2230,BURRANEER,burraneer,False,True
+16,sutherland_shire,Sutherland Shire,2230,CRONULLA,cronulla,True,False
+16,sutherland_shire,Sutherland Shire,2230,GREENHILLS BEACH,greenhills_beach,False,True
+16,sutherland_shire,Sutherland Shire,2230,MAIANBAR,maianbar,False,True
+16,sutherland_shire,Sutherland Shire,2230,WOOLOOWARE,woolooware,False,True

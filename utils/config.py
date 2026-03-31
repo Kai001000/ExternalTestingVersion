@@ -12,6 +12,12 @@ MART_DAILY_ROLLING_DIR = BASE_DIR / "Processed" / "mart_daily_rolling"   # 新�
 PRICE_MAX = 100_000_000
 PRICE_MIN_EXCLUSIVE = 0
 
+# ====== app mode ======
+APP_MODE = os.getenv("APP_MODE", "internal").strip().lower() or "internal"
+if APP_MODE not in {"internal", "external"}:
+    APP_MODE = "internal"
+IS_EXTERNAL_MODE = APP_MODE == "external"
+
 # rolling windows (in weeks) – 可能不再使用，但保留
 ROLL_WINDOWS = {
     "roll4": 4,

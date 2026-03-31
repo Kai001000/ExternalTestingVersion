@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from pages._ranking_cache import load_ranking_snapshot
+from utils.config import IS_EXTERNAL_MODE
 from utils.data import load_daily_rolling
 from utils.i18n import ensure_lang, t
 from utils.ranking_view import render_rank_table
@@ -154,6 +155,9 @@ def _filter_snapshot(snapshot_df: pd.DataFrame, region16, median_range, sales_ra
 
 def main():
     ensure_lang()
+    if IS_EXTERNAL_MODE:
+        st.switch_page("pages/1_Market_View.py")
+        return
     inject_app_theme()
     _inject_css()
 

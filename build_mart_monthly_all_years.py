@@ -9,10 +9,11 @@ FACT_DIR = BASE_DIR / "Processed" / "fact_sales"
 OUT_DIR = BASE_DIR / "Processed" / "mart_monthly"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# ---- NEW: Geo dim for Greater Sydney vs Rest of NSW (Route A) ----
 DIM_DIR = BASE_DIR / "Processed" / "dim"
 DIM_DIR.mkdir(parents=True, exist_ok=True)
-DIM_GCCSA_PATH = DIM_DIR / "dim_postcode_gccsa.csv"  # postcode -> region_group
+
+DIM_GCCSA_PATH = DIM_DIR / "dim_postcode_gccsa.csv"
+DIM_REGION16_PATH = DIM_DIR / "dim_region16_mapping.csv"
 
 PRICE_MAX = 100_000_000
 PRICE_MIN_EXCLUSIVE = 0
@@ -21,13 +22,15 @@ REQUIRED_FACT_COLS = {
     "sale_key",
     "dwelling_group",
     "purchase_price",
-    "contract_date",        # monthly should be contract-month
-    "event_week_start",     # still required for sanity
+    "contract_date",
+    "event_week_start",
     "suburb",
     "postcode",
 }
 
-REQUIRED_DIM_COLS = {"postcode", "region_group"}
+REQUIRED_DIM_GCCSA_COLS = {"postcode", "region_group"}
+REQUIRED_DIM_REGION16_COLS = {"region_id", "region_key", "region_name", "suburb_key", "postcode"}
+
 ALLOWED_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
 
 
@@ -45,17 +48,35 @@ def _norm_postcode_series(s: pd.Series) -> pd.Series:
     )
 
 
+def _norm_suburb_series(s: pd.Series) -> pd.Series:
+    return (
+        s.astype(str)
+         .str.strip()
+         .str.replace(r"\s+", " ", regex=True)
+    )
+
+
+def _make_suburb_key_series(s: pd.Series) -> pd.Series:
+    return (
+        s.astype(str)
+         .str.strip()
+         .str.lower()
+         .str.replace(r"&", " and ", regex=True)
+         .str.replace(r"[^a-z0-9]+", "_", regex=True)
+         .str.replace(r"_+", "_", regex=True)
+         .str.strip("_")
+    )
+
+
 def _load_dim_gccsa(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(
             f"[MISSING DIM] {path}\n"
-            f"Please create it (Route A): postcode -> region_group.\n"
-            f"Expected columns: {sorted(list(REQUIRED_DIM_COLS))}\n"
-            f"Allowed region_group: {sorted(list(ALLOWED_REGION_GROUPS))}"
+            f"Please create postcode -> region_group dim first."
         )
 
     d = pd.read_csv(path, dtype=str)
-    missing = REQUIRED_DIM_COLS - set(d.columns)
+    missing = REQUIRED_DIM_GCCSA_COLS - set(d.columns)
     if missing:
         raise ValueError(f"[BAD DIM SCHEMA] {path.name} missing columns: {sorted(missing)}")
 
@@ -63,8 +84,31 @@ def _load_dim_gccsa(path: Path) -> pd.DataFrame:
     d["postcode"] = _norm_postcode_series(d["postcode"])
     d["region_group"] = d["region_group"].astype(str).str.strip()
     d.loc[~d["region_group"].isin(ALLOWED_REGION_GROUPS), "region_group"] = np.nan
-
     d = d.dropna(subset=["postcode"]).drop_duplicates(subset=["postcode"], keep="first")
+
+    return d
+
+
+def _load_dim_region16(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"[MISSING DIM] {path}\n"
+            f"Please create dim_region16_mapping.csv first."
+        )
+
+    d = pd.read_csv(path, dtype=str)
+    missing = REQUIRED_DIM_REGION16_COLS - set(d.columns)
+    if missing:
+        raise ValueError(f"[BAD DIM SCHEMA] {path.name} missing columns: {sorted(missing)}")
+
+    d = d.copy()
+    d["region_id"] = pd.to_numeric(d["region_id"], errors="coerce").astype("Int64")
+    d["region_key"] = d["region_key"].astype(str).str.strip()
+    d["region_name"] = d["region_name"].astype(str).str.strip()
+    d["suburb_key"] = d["suburb_key"].astype(str).str.strip().str.lower()
+    d["postcode"] = _norm_postcode_series(d["postcode"])
+
+    d = d.drop_duplicates(subset=["suburb_key", "postcode"], keep="first")
     return d
 
 
@@ -73,6 +117,23 @@ def _attach_region_group(df: pd.DataFrame, dim_gccsa: pd.DataFrame) -> pd.DataFr
     out["postcode"] = _norm_postcode_series(out["postcode"])
     out = out.merge(dim_gccsa, on="postcode", how="left")
     out["region_group"] = out["region_group"].fillna("Unknown")
+    return out
+
+
+def _attach_region16(df: pd.DataFrame, dim_region16: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out["postcode"] = _norm_postcode_series(out["postcode"])
+    out["suburb"] = _norm_suburb_series(out["suburb"])
+    out["suburb_key"] = _make_suburb_key_series(out["suburb"])
+
+    out = out.merge(
+        dim_region16[["region_id", "region_key", "region_name", "suburb_key", "postcode"]],
+        on=["suburb_key", "postcode"],
+        how="left",
+    )
+
+    out["region16_name"] = out["region_name"].fillna("Unknown")
+    out["region16_key"] = out["region_key"].fillna("unknown")
     return out
 
 
@@ -85,7 +146,7 @@ def _load_and_filter_fact(path: Path) -> pd.DataFrame:
 
     df = df.copy()
     df["postcode"] = _norm_postcode_series(df["postcode"])
-    df["suburb"] = df["suburb"].astype(str).str.strip()
+    df["suburb"] = _norm_suburb_series(df["suburb"])
 
     df = _ensure_datetime(df, "contract_date")
     df = _ensure_datetime(df, "event_week_start")
@@ -93,11 +154,7 @@ def _load_and_filter_fact(path: Path) -> pd.DataFrame:
     df = df[df["dwelling_group"].isin(["HOUSE", "UNIT"])].copy()
     df = df[df["purchase_price"].notna()].copy()
     df = df[(df["purchase_price"] > PRICE_MIN_EXCLUSIVE) & (df["purchase_price"] <= PRICE_MAX)].copy()
-
-    # monthly needs contract_date
     df = df[df["contract_date"].notna()].copy()
-
-    # keep event_week_start sanity (should exist from your fact)
     df = df[df["event_week_start"].notna()].copy()
 
     return df
@@ -115,19 +172,18 @@ def _build_level(df: pd.DataFrame, level: str) -> pd.DataFrame:
     if level == "NSW":
         df2["region"] = "NSW"
 
-
     elif level == "REGION":
-
         if "region_group" not in df2.columns:
-            raise ValueError("[REGION LEVEL] region_group missing. Did you join dim_postcode_gccsa.csv?")
-
+            raise ValueError("[REGION LEVEL] region_group missing.")
         df2["region"] = df2["region_group"].astype(str).str.strip()
-
         allowed = ALLOWED_REGION_GROUPS | {"Unknown"}
-
         df2 = df2[df2["region"].isin(allowed)].copy()
-        # optional: drop Unknown
-        # df2 = df2[df2["region"] != "Unknown"].copy()
+
+    elif level == "REGION16":
+        if "region16_name" not in df2.columns:
+            raise ValueError("[REGION16 LEVEL] region16_name missing.")
+        df2["region"] = df2["region16_name"].astype(str).str.strip()
+        df2 = df2[df2["region"] != ""].copy()
 
     elif level == "SUBURB":
         df2["region"] = df2["suburb"].astype(str).str.strip()
@@ -160,6 +216,7 @@ def main():
         raise FileNotFoundError(f"No fact_sales files found under: {FACT_DIR}")
 
     dim_gccsa = _load_dim_gccsa(DIM_GCCSA_PATH)
+    dim_region16 = _load_dim_region16(DIM_REGION16_PATH)
 
     dfs = []
     years = []
@@ -171,21 +228,28 @@ def main():
 
         d = _load_and_filter_fact(f)
         d = _attach_region_group(d, dim_gccsa)
+        d = _attach_region16(d, dim_region16)
         dfs.append(d)
 
     df = pd.concat(dfs, ignore_index=True)
     label = f"{min(years)}_{max(years)}" if years else "all_years"
+
     print("REGION_GROUP counts:")
     print(df["region_group"].value_counts(dropna=False))
 
-    print("Building MONTHLY mart for years:", sorted(years) if years else "(unknown)")
+    print("\nREGION16 counts:")
+    print(df["region16_name"].value_counts(dropna=False).head(30))
+
+    print("\nBuilding MONTHLY mart for years:", sorted(years) if years else "(unknown)")
     print("Rows after filters:", f"{len(df):,}")
     print("contract_date min/max:", df["contract_date"].min(), df["contract_date"].max())
     print("purchase_price min/max:", int(df["purchase_price"].min()), int(df["purchase_price"].max()))
-    print("Dim mapping:", DIM_GCCSA_PATH)
+    print("Dim GCCSA:", DIM_GCCSA_PATH)
+    print("Dim REGION16:", DIM_REGION16_PATH)
 
     _build_level(df, "NSW").to_parquet(OUT_DIR / f"mart_monthly_nsw_{label}.parquet", index=False)
-    _build_level(df, "REGION").to_parquet(OUT_DIR / f"mart_monthly_region_{label}.parquet", index=False)  # NEW
+    _build_level(df, "REGION").to_parquet(OUT_DIR / f"mart_monthly_region_{label}.parquet", index=False)
+    _build_level(df, "REGION16").to_parquet(OUT_DIR / f"mart_monthly_region16_{label}.parquet", index=False)
     _build_level(df, "SUBURB").to_parquet(OUT_DIR / f"mart_monthly_suburb_{label}.parquet", index=False)
     _build_level(df, "POSTCODE").to_parquet(OUT_DIR / f"mart_monthly_postcode_{label}.parquet", index=False)
 
