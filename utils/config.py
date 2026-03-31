@@ -13,9 +13,9 @@ PRICE_MAX = 100_000_000
 PRICE_MIN_EXCLUSIVE = 0
 
 # ====== app mode ======
-APP_MODE = os.getenv("APP_MODE", "internal").strip().lower() or "internal"
+APP_MODE = os.getenv("APP_MODE", "external").strip().lower() or "external"
 if APP_MODE not in {"internal", "external"}:
-    APP_MODE = "internal"
+    APP_MODE = "external"
 IS_EXTERNAL_MODE = APP_MODE == "external"
 
 # rolling windows (in weeks) – 可能不再使用，但保留
