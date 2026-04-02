@@ -9,6 +9,7 @@ from utils.charts import build_band_chart, build_interactive_chart
 from utils.config import BASE_DIR, IS_EXTERNAL_MODE
 from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales
 from utils.i18n import ensure_lang, t
+from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_float0, fmt_int, fmt_pct
 from utils.ui import inject_app_theme, sidebar_common
 
@@ -1240,6 +1241,7 @@ def _build_market_view_stable_lookup(plot_df_all: pd.DataFrame) -> pd.DataFrame:
 
 
 def main():
+    perf = PagePerf("market_view")
     ensure_lang()
     inject_app_theme()
     _inject_market_view_css()
@@ -1248,7 +1250,8 @@ def main():
         opts = sidebar_common()
     dwelling = opts["dwelling"]
 
-    seed_daily = load_daily_rolling("NSW")
+    with perf.track("source_data_load"):
+        seed_daily = load_daily_rolling("NSW")
     if seed_daily.is_empty():
         st.error(t("market_view_missing_daily"))
         return
@@ -1256,7 +1259,8 @@ def main():
     max_date = seed_daily["date"].max()
     _render_topbar(max_date)
     level, preset, start_ts, end_ts, stable_ratio = _render_page_filter_bar(min_date, max_date)
-    current_daily = _load_level_daily(level)
+    with perf.track("level_data_load"):
+        current_daily = _load_level_daily(level)
     if current_daily.is_empty():
         st.error(t("no_data"))
         return
@@ -1288,38 +1292,40 @@ def main():
             st.warning(t("select_region"))
             return
 
-        df_scope = daily.filter(pl.col("dwelling_group") == dwelling).to_pandas()
-        df_scope["date"] = pd.to_datetime(df_scope["date"]).dt.normalize()
-        if level != "NSW":
-            df_scope = df_scope[df_scope["region"].isin(regions_selected)]
-        if df_scope.empty:
-            st.info(t("no_data"))
-            return
+        with perf.track("filter_application"):
+            df_scope = daily.filter(pl.col("dwelling_group") == dwelling).to_pandas()
+            df_scope["date"] = pd.to_datetime(df_scope["date"]).dt.normalize()
+            if level != "NSW":
+                df_scope = df_scope[df_scope["region"].isin(regions_selected)]
+            if df_scope.empty:
+                st.info(t("no_data"))
+                return
 
-        one_year_ago = pd.to_datetime(daily["date"].max()) - pd.DateOffset(years=1)
-        base_df = daily.filter((pl.col("dwelling_group") == dwelling) & (pl.col("date") >= one_year_ago)).to_pandas()
-        base_sales = base_df.groupby("region")["sales_28d"].median().to_dict()
+            one_year_ago = pd.to_datetime(daily["date"].max()) - pd.DateOffset(years=1)
+            base_df = daily.filter((pl.col("dwelling_group") == dwelling) & (pl.col("date") >= one_year_ago)).to_pandas()
+            base_sales = base_df.groupby("region")["sales_28d"].median().to_dict()
 
-        plot_df_all = _build_market_view_plot_df(
-            df_scope,
-            base_sales=base_sales,
-            stable_ratio=stable_ratio,
-            level=level,
-        )
-        stable_lookup = _build_market_view_stable_lookup(plot_df_all)
+        with perf.track("chart_prep"):
+            plot_df_all = _build_market_view_plot_df(
+                df_scope,
+                base_sales=base_sales,
+                stable_ratio=stable_ratio,
+                level=level,
+            )
+            stable_lookup = _build_market_view_stable_lookup(plot_df_all)
 
-        summary_full_df = df_scope[["date", "region", "rolling_median", "sales_28d"]].merge(
-            stable_lookup,
-            left_on=["date", "region"],
-            right_on=["event_time", "region"],
-            how="left",
-        )
-        summary_visible_df = summary_full_df[(summary_full_df["date"] >= start_ts) & (summary_full_df["date"] <= end_ts)].copy()
-        if summary_visible_df.empty:
-            st.info(t("no_data"))
-            return
-        focus_metrics = _build_focus_metrics(summary_full_df, summary_visible_df)
-        plot_df = plot_df_all[(plot_df_all["event_time"] >= start_ts) & (plot_df_all["event_time"] <= end_ts)].copy()
+            summary_full_df = df_scope[["date", "region", "rolling_median", "sales_28d"]].merge(
+                stable_lookup,
+                left_on=["date", "region"],
+                right_on=["event_time", "region"],
+                how="left",
+            )
+            summary_visible_df = summary_full_df[(summary_full_df["date"] >= start_ts) & (summary_full_df["date"] <= end_ts)].copy()
+            if summary_visible_df.empty:
+                st.info(t("no_data"))
+                return
+            focus_metrics = _build_focus_metrics(summary_full_df, summary_visible_df)
+            plot_df = plot_df_all[(plot_df_all["event_time"] >= start_ts) & (plot_df_all["event_time"] <= end_ts)].copy()
 
         chart_card = st.container(border=True)
         with chart_card:
@@ -1364,7 +1370,8 @@ def main():
 
         band_card = st.container(border=True)
         with band_card:
-            band_data = load_price_band_data(dwelling)
+            with perf.track("band_data_load"):
+                band_data = load_price_band_data(dwelling)
             st.markdown(
                 f'<div class="mv-section-title">{escape(t("price_band_trend"))}</div>'
                 f'<div class="mv-section-subtitle">{escape(t("price_band_trend_note"))}</div>',
@@ -1388,10 +1395,11 @@ def main():
                         st.markdown(f'<div class="mv-band-inline-label" style="padding-top: 8px; text-align: right;">{escape(t("display_mode"))}</div>', unsafe_allow_html=True)
                     with right_cols[1]:
                         band_display_mode = st.selectbox(t("display_mode"), LINE_DISPLAY_MODES, index=0, key=f"band_display_mode_{dwelling}", label_visibility="collapsed")
-                filtered_band = filtered_band.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
-                summary_band = band_data.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
-                chart_band_df, _ = _calc_band_summary(filtered_band, stable_ratio)
-                _, band_summary = _calc_band_summary(summary_band, stable_ratio)
+                with perf.track("band_chart_prep"):
+                    filtered_band = filtered_band.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
+                    summary_band = band_data.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
+                    chart_band_df, _ = _calc_band_summary(filtered_band, stable_ratio)
+                    _, band_summary = _calc_band_summary(summary_band, stable_ratio)
                 if chart_band_df.empty:
                     st.info(t("market_view_no_band_filtered_data"))
                 else:
@@ -1426,5 +1434,11 @@ def main():
                             """,
                             unsafe_allow_html=True,
                         )
+    timing_payload = perf.log(
+        dwelling=dwelling,
+        level=level,
+        region_count=int(len(regions_selected)),
+    )
+    render_internal_timing_summary(timing_payload, enabled=not IS_EXTERNAL_MODE)
 if __name__ == "__main__":
     main()

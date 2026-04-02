@@ -1,6 +1,7 @@
-import json
+﻿import json
 import math
 import re
+from contextlib import nullcontext
 from pathlib import Path
 
 import pandas as pd
@@ -11,6 +12,7 @@ from utils.config import IS_EXTERNAL_MODE
 from utils.data import format_price, get_domain_rent_source_status, load_domain_rent_listings
 from utils.i18n import ensure_lang, tr
 from utils.map_view import resolve_budget_map_view
+from utils.perf import PagePerf, render_internal_timing_summary
 from utils.ui import inject_app_theme
 
 
@@ -151,6 +153,7 @@ def _normalise_budget_value(value, min_budget, max_budget):
 
 def _init_state():
     st.session_state.setdefault("rent_shortlist_ids", [])
+    st.session_state.setdefault("rent_shortlist_items", {})
     st.session_state.setdefault("rent_selected_suburb", "__ALL__")
     st.session_state.setdefault("rent_map_focus_token", None)
     st.session_state.setdefault("rent_map_view", {"center": None, "zoom": None})
@@ -176,28 +179,54 @@ def _ensure_budget_input_state(min_budget, max_budget):
     st.session_state.setdefault("rent_budget_input_error", None)
 
 
-def _sync_budget_text_from_slider():
-    budget_min, budget_max = st.session_state["rent_budget_range_slider"]
-    st.session_state["rent_budget_min_input"] = _format_budget_input(budget_min)
-    st.session_state["rent_budget_max_input"] = _format_budget_input(budget_max)
-    st.session_state["rent_budget_input_error"] = None
-
-
-def _apply_budget_text_inputs(min_budget, max_budget):
-    parsed_min = _parse_budget_input(st.session_state.get("rent_budget_min_input"))
-    parsed_max = _parse_budget_input(st.session_state.get("rent_budget_max_input"))
-    if parsed_min is None or parsed_max is None:
-        st.session_state["rent_budget_input_error"] = tr("租金预算输入必须是有效数字。", "Rent budget inputs must be valid numbers.")
+def _apply_pending_budget_widget_state(min_budget, max_budget):
+    pending_range = st.session_state.pop("rent_budget_pending_range", None)
+    if pending_range is None:
         return
-    budget_min = _normalise_budget_value(parsed_min, min_budget, max_budget)
-    budget_max = _normalise_budget_value(parsed_max, min_budget, max_budget)
+    budget_min = _normalise_budget_value(pending_range[0], min_budget, max_budget)
+    budget_max = _normalise_budget_value(pending_range[1], min_budget, max_budget)
     if budget_min > budget_max:
-        st.session_state["rent_budget_input_error"] = tr("最低租金预算不能高于最高租金预算。", "Minimum rent budget cannot be higher than maximum rent budget.")
-        return
+        budget_min, budget_max = min_budget, max_budget
     st.session_state["rent_budget_range_slider"] = (budget_min, budget_max)
     st.session_state["rent_budget_min_input"] = _format_budget_input(budget_min)
     st.session_state["rent_budget_max_input"] = _format_budget_input(budget_max)
-    st.session_state["rent_budget_input_error"] = None
+
+
+def _resolve_budget_submit_form_safe(*, min_budget, max_budget, slider_range, text_min_raw, text_max_raw):
+    slider_min = _normalise_budget_value(slider_range[0], min_budget, max_budget)
+    slider_max = _normalise_budget_value(slider_range[1], min_budget, max_budget)
+    parsed_min = _parse_budget_input(text_min_raw)
+    parsed_max = _parse_budget_input(text_max_raw)
+    use_text_override = parsed_min is not None and parsed_max is not None
+
+    if use_text_override:
+        budget_min = _normalise_budget_value(parsed_min, min_budget, max_budget)
+        budget_max = _normalise_budget_value(parsed_max, min_budget, max_budget)
+        if budget_min > budget_max:
+            st.session_state["rent_budget_input_error"] = tr("最低租金预算不能高于最高租金预算。", "Minimum rent budget cannot be higher than maximum rent budget.")
+            budget_min, budget_max = slider_min, slider_max
+        else:
+            st.session_state["rent_budget_input_error"] = None
+    else:
+        budget_min, budget_max = slider_min, slider_max
+        text_min_present = bool(str(text_min_raw or "").strip())
+        text_max_present = bool(str(text_max_raw or "").strip())
+        if text_min_present or text_max_present:
+            st.session_state["rent_budget_input_error"] = tr("租金预算输入无效，已使用滑块预算区间。", "Rent budget inputs were invalid, so the slider range was used.")
+        else:
+            st.session_state["rent_budget_input_error"] = None
+
+    formatted_min = _format_budget_input(budget_min)
+    formatted_max = _format_budget_input(budget_max)
+    needs_widget_sync = (
+        st.session_state.get("rent_budget_range_slider") != (budget_min, budget_max)
+        or st.session_state.get("rent_budget_min_input") != formatted_min
+        or st.session_state.get("rent_budget_max_input") != formatted_max
+    )
+    if needs_widget_sync:
+        st.session_state["rent_budget_pending_range"] = (budget_min, budget_max)
+    st.session_state["rent_budget_applied_range"] = (budget_min, budget_max)
+    return needs_widget_sync
 
 
 def _get_shortlist_ids():
@@ -209,12 +238,20 @@ def _set_shortlist_ids(ids):
     st.session_state["rent_shortlist_ids"] = sorted(ids)
 
 
-def _toggle_shortlist(listing_id):
+def _snapshot_listing(row):
+    return row.to_dict()
+
+
+def _toggle_shortlist(listing_id, row=None):
     shortlist_ids = _get_shortlist_ids()
+    shortlist_items = st.session_state.setdefault("rent_shortlist_items", {})
     if listing_id in shortlist_ids:
         shortlist_ids.remove(listing_id)
+        shortlist_items.pop(listing_id, None)
     else:
         shortlist_ids.add(listing_id)
+        if row is not None:
+            shortlist_items[listing_id] = _snapshot_listing(row)
     _set_shortlist_ids(shortlist_ids)
 
 
@@ -238,6 +275,24 @@ def _reset_ranking_filters():
 
 def _set_map_view(center, zoom):
     st.session_state["rent_map_view"] = {"center": center, "zoom": zoom}
+
+
+def _valid_selected(values, valid_options):
+    valid_set = set(valid_options)
+    return [value for value in (values or []) if value in valid_set]
+
+
+def _build_shortlist_df(df):
+    shortlist_ids = _get_shortlist_ids()
+    shortlist_df = df.loc[df["listing_id"].astype(str).isin(shortlist_ids)].copy()
+    current_ids = set(shortlist_df["listing_id"].astype(str).tolist())
+    stored_items = st.session_state.get("rent_shortlist_items", {})
+    missing_rows = [stored_items[item_id] for item_id in shortlist_ids if item_id not in current_ids and item_id in stored_items]
+    if missing_rows:
+        shortlist_df = pd.concat([shortlist_df, pd.DataFrame(missing_rows)], ignore_index=True, sort=False)
+    if shortlist_df.empty:
+        return shortlist_df
+    return shortlist_df.drop_duplicates(subset=["listing_id"], keep="first")
 
 
 def _full_budget_selected(current_min, current_max, absolute_min, absolute_max):
@@ -592,7 +647,7 @@ def _listing_card(row, *, key_prefix):
             with action_cols[0]:
                 label = tr("移出 shortlist", "Remove") if str(row["listing_id"]) in _get_shortlist_ids() else tr("加入 shortlist", "Shortlist")
                 if st.button(label, key=f"{key_prefix}_toggle_{row['listing_id']}", use_container_width=True):
-                    _toggle_shortlist(str(row["listing_id"]))
+                    _toggle_shortlist(str(row["listing_id"]), row)
                     st.rerun()
             if not IS_EXTERNAL_MODE:
                 with action_cols[1]:
@@ -607,7 +662,7 @@ def _render_listing_results(listings, selected_suburb):
         st.info(tr("当前 suburb / 筛选条件下没有租盘。", "No rental listings match the current suburb or filters."))
         return
     label = selected_suburb if selected_suburb != "__ALL__" else tr("全部匹配 suburb", "All matching suburbs")
-    st.caption(f"{tr('当前查看', 'Showing')}: {label} • {len(listings):,} {tr('套租盘', 'rentals')}")
+    st.caption(f"{tr('当前查看', 'Showing')}: {label} | {len(listings):,} {tr('套租盘', 'rentals')}")
     for _, row in listings.head(14).iterrows():
         _listing_card(row, key_prefix="rent_browse")
     if len(listings) > 14:
@@ -623,14 +678,16 @@ def _render_shortlist_panel(shortlist_df):
 
 
 def main():
+    perf = PagePerf("rent_budget")
     ensure_lang()
     inject_app_theme()
     _init_state()
     st.markdown(f"<div class='budget-kicker'>{tr('租房工作流', 'Rental Workflow')}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='budget-title'>{tr('租金预算地图', 'Rent Budget Map')}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='budget-note'>{tr('核心问题：在我当前租金预算和条件下，哪些 suburb 可选、覆盖度如何、具体有哪些租盘？', 'Core question: under the current rental budget and filters, which suburbs are available, how strong is the budget coverage, and which specific rentals are there?')}</div>", unsafe_allow_html=True)
-    source_status = get_domain_rent_source_status()
-    df = load_domain_rent_listings()
+    with perf.track("source_data_load"):
+        source_status = get_domain_rent_source_status()
+        df = load_domain_rent_listings()
     if df.empty:
         st.error(tr("未找到可用的 Domain 租盘 parquet 文件。", "No Domain rent parquet file was found."))
         st.code(source_status["path"])
@@ -639,21 +696,32 @@ def main():
         df = _filter_external_extreme_rents(df)
     min_budget, max_budget = _normalise_weekly_bounds(df)
     _ensure_budget_input_state(min_budget, max_budget)
+    _apply_pending_budget_widget_state(min_budget, max_budget)
     shortlist_count = len(_get_shortlist_ids())
+    search_submitted = False
+    sort_options = {
+        tr("周租从低到高", "Weekly rent low to high"): ("rent_mid", True),
+        tr("周租从高到低", "Weekly rent high to low"): ("rent_mid", False),
+        tr("最早可入住", "Earliest available"): ("available_date", True),
+        tr("卧室数", "Bedrooms"): ("bedrooms", False),
+        tr("Suburb", "Suburb"): ("suburb", True),
+    }
 
     with st.container(border=True):
-        budget_col, filter_col = st.columns([1.25, 2.0])
-        with budget_col:
-            st.markdown(f"<div class='budget-budget-pill'>{tr('当前周租预算', 'Current weekly rent budget')}: {_weekly_money(min_budget)} - {_weekly_money(max_budget)}</div>", unsafe_allow_html=True)
-            input_cols = st.columns(2)
-            with input_cols[0]:
-                st.text_input(tr("最低周租", "Min weekly rent"), key="rent_budget_min_input", on_change=_apply_budget_text_inputs, args=(min_budget, max_budget))
-            with input_cols[1]:
-                st.text_input(tr("最高周租", "Max weekly rent"), key="rent_budget_max_input", on_change=_apply_budget_text_inputs, args=(min_budget, max_budget))
-            budget_min, budget_max = st.slider(tr("周租预算区间", "Weekly rent budget range"), min_value=min_budget, max_value=max_budget, step=RENT_BUDGET_STEP, format="$%d", key="rent_budget_range_slider", on_change=_sync_budget_text_from_slider)
-            if st.session_state.get("rent_budget_input_error"):
-                st.warning(st.session_state["rent_budget_input_error"])
-        with filter_col:
+        with st.form("rent_search_form", border=False):
+            budget_col, filter_col = st.columns([1.25, 2.0])
+            with budget_col:
+                st.markdown(f"<div class='budget-budget-pill'>{tr('当前周租预算', 'Current weekly rent budget')}: {_weekly_money(min_budget)} - {_weekly_money(max_budget)}</div>", unsafe_allow_html=True)
+                input_cols = st.columns(2)
+                with input_cols[0]:
+                    st.text_input(tr("最低周租", "Min weekly rent"), key="rent_budget_min_input")
+                with input_cols[1]:
+                    st.text_input(tr("最高周租", "Max weekly rent"), key="rent_budget_max_input")
+                budget_min, budget_max = st.slider(tr("周租预算区间", "Weekly rent budget range"), min_value=min_budget, max_value=max_budget, step=RENT_BUDGET_STEP, format="$%d", key="rent_budget_range_slider")
+                if st.session_state.get("rent_budget_input_error"):
+                    st.warning(st.session_state["rent_budget_input_error"])
+            with filter_col:
+                pass
             row1, row2, row3 = st.columns([1.15, 1.0, 1.0])
             with row1:
                 suburb_options = sorted(x for x in df["suburb"].dropna().unique().tolist() if str(x).strip())
@@ -666,11 +734,19 @@ def main():
                 current_min_bathrooms = int(st.session_state.get("rent_min_bathrooms", 0))
                 current_min_parking = int(st.session_state.get("rent_min_parking", 0))
                 property_group_context, _ = _apply_rent_filters(df, budget_min=budget_min, budget_max=budget_max, min_budget=min_budget, max_budget=max_budget, selected_suburbs=selected_suburbs, selected_postcodes=selected_postcodes, min_bedrooms=current_min_bedrooms, min_bathrooms=current_min_bathrooms, min_parking=current_min_parking, exact_bedrooms=bool(st.session_state.get("rent_exact_bedrooms", False)), exact_bathrooms=bool(st.session_state.get("rent_exact_bathrooms", False)), exact_parking=bool(st.session_state.get("rent_exact_parking", False)), include_budget=False, skip_filters={"property_group", "property_subtype"})
-                property_group_options = _property_group_options(property_group_context)
-                group_labels = [f"{label} ({count:,})" for _, label, count in property_group_options]
-                label_to_group = {f"{label} ({count:,})": group for group, label, count in property_group_options}
-                selected_group_labels = st.multiselect(tr("房产大类", "Property group"), options=group_labels, placeholder=tr("不限大类", "Any group"), key="rent_selected_group_labels")
-                selected_property_groups = [label_to_group[label] for label in selected_group_labels]
+                with perf.track("filter_option_prep"):
+                    property_group_options = _property_group_options(property_group_context)
+                group_values = [group for group, _, _ in property_group_options]
+                group_label_map = {group: label for group, label, _ in property_group_options}
+                group_count_map = {group: count for group, _, count in property_group_options}
+                st.session_state["rent_selected_property_groups"] = _valid_selected(st.session_state.get("rent_selected_property_groups"), group_values)
+                selected_property_groups = st.multiselect(
+                    tr("房产大类", "Property group"),
+                    options=group_values,
+                    format_func=lambda group: f"{group_label_map[group]} ({group_count_map[group]:,})",
+                    placeholder=tr("不限大类", "Any group"),
+                    key="rent_selected_property_groups",
+                )
             row4, row5, row6, row7 = st.columns([1.0, 1.0, 1.0, 1.1])
             with row4:
                 min_bedrooms = st.selectbox(tr("最少卧室", "Min bedrooms"), options=[0, 1, 2, 3, 4, 5], format_func=lambda x: tr("不限", "Any") if x == 0 else f"{x}+", key="rent_min_bedrooms")
@@ -682,7 +758,6 @@ def main():
                 min_parking = st.selectbox(tr("最少车位", "Min parking"), options=[0, 1, 2, 3, 4], format_func=lambda x: tr("不限", "Any") if x == 0 else f"{x}+", key="rent_min_parking")
                 st.toggle(tr("精确车位", "Exact parking"), value=bool(st.session_state.get("rent_exact_parking", False)), key="rent_exact_parking")
             with row7:
-                sort_options = {tr("周租从低到高", "Weekly rent low to high"): ("rent_mid", True), tr("周租从高到低", "Weekly rent high to low"): ("rent_mid", False), tr("最早可入住", "Earliest available"): ("available_date", True), tr("卧室数", "Bedrooms"): ("bedrooms", False), tr("Suburb", "Suburb"): ("suburb", True)}
                 selected_sort = st.selectbox(tr("列表排序", "Listing sort"), options=list(sort_options.keys()), key="rent_selected_sort")
             selected_property_subtypes = []
             if st.toggle(tr("显示细分类", "Show subtype filter"), value=False, key="rent_show_subtypes"):
@@ -691,17 +766,37 @@ def main():
                     with subtype_cols[idx % len(subtype_cols)]:
                         with st.expander(f"{label} ({count:,})", expanded=group in selected_property_groups):
                             subtype_count_series = _subtype_counts(property_group_context, group)
-                            subtype_labels = [f"{_title_case_subtype(subtype)} ({int(sub_count):,})" for subtype, sub_count in subtype_count_series.items()]
-                            subtype_label_to_value = {f"{_title_case_subtype(subtype)} ({int(sub_count):,})": subtype for subtype, sub_count in subtype_count_series.items()}
-                            picked_labels = st.multiselect(tr("选择细分类", "Select subtypes"), options=subtype_labels, default=subtype_labels if group in selected_property_groups else [], key=f"rent_subtypes_{group}")
-                            selected_property_subtypes.extend([subtype_label_to_value[item] for item in picked_labels])
+                            subtype_values = list(subtype_count_series.index)
+                            state_key = f"rent_subtypes_{group}"
+                            st.session_state[state_key] = _valid_selected(st.session_state.get(state_key), subtype_values)
+                            picked_values = st.multiselect(
+                                tr("选择细分类", "Select subtypes"),
+                                options=subtype_values,
+                                format_func=lambda subtype, counts=subtype_count_series: f"{_title_case_subtype(subtype)} ({int(counts.get(subtype, 0)):,})",
+                                key=state_key,
+                            )
+                            selected_property_subtypes.extend(picked_values)
             _render_filter_chips(selected_property_groups, selected_property_subtypes, selected_suburbs, selected_postcodes, min_bedrooms, min_bathrooms, min_parking)
+            search_submitted = st.form_submit_button("Search", type="primary", use_container_width=True)
 
-    context_rent_listings, _ = _apply_rent_filters(df, budget_min=budget_min, budget_max=budget_max, min_budget=min_budget, max_budget=max_budget, selected_property_groups=selected_property_groups, selected_property_subtypes=selected_property_subtypes, selected_suburbs=selected_suburbs, selected_postcodes=selected_postcodes, min_bedrooms=min_bedrooms, min_bathrooms=min_bathrooms, min_parking=min_parking, exact_bedrooms=bool(st.session_state.get("rent_exact_bedrooms", False)), exact_bathrooms=bool(st.session_state.get("rent_exact_bathrooms", False)), exact_parking=bool(st.session_state.get("rent_exact_parking", False)), include_budget=False)
-    filtered_rent_listings, filter_debug_steps = _apply_rent_filters(df, budget_min=budget_min, budget_max=budget_max, min_budget=min_budget, max_budget=max_budget, selected_property_groups=selected_property_groups, selected_property_subtypes=selected_property_subtypes, selected_suburbs=selected_suburbs, selected_postcodes=selected_postcodes, min_bedrooms=min_bedrooms, min_bathrooms=min_bathrooms, min_parking=min_parking, exact_bedrooms=bool(st.session_state.get("rent_exact_bedrooms", False)), exact_bathrooms=bool(st.session_state.get("rent_exact_bathrooms", False)), exact_parking=bool(st.session_state.get("rent_exact_parking", False)), include_budget=True)
+    if search_submitted:
+        if _resolve_budget_submit_form_safe(
+            min_budget=min_budget,
+            max_budget=max_budget,
+            slider_range=(budget_min, budget_max),
+            text_min_raw=st.session_state.get("rent_budget_min_input"),
+            text_max_raw=st.session_state.get("rent_budget_max_input"),
+        ):
+            st.rerun()
+        budget_min, budget_max = st.session_state["rent_budget_range_slider"]
+    with (st.spinner("Searching...") if search_submitted else nullcontext()):
+        with perf.track("filter_application"):
+            context_rent_listings, _ = _apply_rent_filters(df, budget_min=budget_min, budget_max=budget_max, min_budget=min_budget, max_budget=max_budget, selected_property_groups=selected_property_groups, selected_property_subtypes=selected_property_subtypes, selected_suburbs=selected_suburbs, selected_postcodes=selected_postcodes, min_bedrooms=min_bedrooms, min_bathrooms=min_bathrooms, min_parking=min_parking, exact_bedrooms=bool(st.session_state.get("rent_exact_bedrooms", False)), exact_bathrooms=bool(st.session_state.get("rent_exact_bathrooms", False)), exact_parking=bool(st.session_state.get("rent_exact_parking", False)), include_budget=False)
+            filtered_rent_listings, filter_debug_steps = _apply_rent_filters(df, budget_min=budget_min, budget_max=budget_max, min_budget=min_budget, max_budget=max_budget, selected_property_groups=selected_property_groups, selected_property_subtypes=selected_property_subtypes, selected_suburbs=selected_suburbs, selected_postcodes=selected_postcodes, min_bedrooms=min_bedrooms, min_bathrooms=min_bathrooms, min_parking=min_parking, exact_bedrooms=bool(st.session_state.get("rent_exact_bedrooms", False)), exact_bathrooms=bool(st.session_state.get("rent_exact_bathrooms", False)), exact_parking=bool(st.session_state.get("rent_exact_parking", False)), include_budget=True)
     sort_column, sort_ascending = sort_options[selected_sort]
     filtered_rent_listings = filtered_rent_listings.sort_values(by=[sort_column, "suburb", "address"], ascending=[sort_ascending, True, True], na_position="last")
-    suburb_summary = _suburb_summary(context_rent_listings, budget_min=budget_min, budget_max=budget_max)
+    with perf.track("ranking_table_prep"):
+        suburb_summary = _suburb_summary(context_rent_listings, budget_min=budget_min, budget_max=budget_max)
     selected_suburb = _selected_suburb()
     available_suburbs = set(suburb_summary["suburb"].astype(str)) if not suburb_summary.empty else set()
     if selected_suburb != "__ALL__" and selected_suburb not in available_suburbs:
@@ -715,7 +810,7 @@ def main():
     focused_summary = suburb_summary.loc[suburb_summary["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else suburb_summary
     context_scope = context_rent_listings.loc[context_rent_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else context_rent_listings
     insight = _rent_insight(focused_rent_listings if selected_suburb != "__ALL__" else filtered_rent_listings, context_scope, focused_summary if selected_suburb != "__ALL__" else suburb_summary, focused_suburb=selected_suburb, budget_max=budget_max)
-    shortlist_df = df.loc[df["listing_id"].astype(str).isin(_get_shortlist_ids())].copy().sort_values(by=["rent_mid", "suburb", "address"], ascending=[True, True, True], na_position="last")
+    shortlist_df = _build_shortlist_df(df).sort_values(by=["rent_mid", "suburb", "address"], ascending=[True, True, True], na_position="last")
     show_debug = (not IS_EXTERNAL_MODE) and str(st.query_params.get("rent_debug", "0")) == "1"
     focus_notice = _consume_focus_notice("rent_focus_notice")
     if show_debug:
@@ -741,7 +836,8 @@ def main():
             _render_suburb_ranking(focused_summary if selected_suburb != "__ALL__" else suburb_summary)
         with st.container(border=True):
             st.markdown(f"**{tr('Map', 'Map')}**")
-            selected_suburb = _build_map(context_rent_listings, suburb_summary, selected_suburb)
+            with perf.track("map_prep"):
+                selected_suburb = _build_map(context_rent_listings, suburb_summary, selected_suburb)
         with st.container(border=True):
             st.markdown(f"**{tr('租盘浏览', 'Rental Listings')}**")
             _render_listing_results(focused_rent_listings, selected_suburb)
@@ -753,10 +849,15 @@ def main():
         with status_cols[1]:
             if shortlist_count > 0 and st.button(tr("清空 shortlist", "Clear shortlist"), use_container_width=True):
                 _set_shortlist_ids(set())
+                st.session_state["rent_shortlist_items"] = {}
                 st.rerun()
         with st.expander(tr("打开 shortlist 工作区", "Open shortlist workspace"), expanded=shortlist_count > 0):
             _render_shortlist_panel(shortlist_df)
 
+    timing_payload = perf.log(shortlisted=len(_get_shortlist_ids()), filtered_rows=int(len(filtered_rent_listings)))
+    render_internal_timing_summary(timing_payload, enabled=not IS_EXTERNAL_MODE)
+
 
 if __name__ == "__main__":
     main()
+

@@ -8,6 +8,7 @@ from pages._ranking_cache import load_ranking_snapshot
 from utils.config import IS_EXTERNAL_MODE
 from utils.data import load_daily_rolling
 from utils.i18n import ensure_lang, t
+from utils.perf import PagePerf, render_internal_timing_summary
 from utils.ranking_view import render_rank_table
 from utils.tables import fmt_date
 from utils.ui import inject_app_theme, sidebar_common
@@ -154,9 +155,19 @@ def _filter_snapshot(snapshot_df: pd.DataFrame, region16, median_range, sales_ra
 
 
 def main():
+    perf = PagePerf("ranking")
     ensure_lang()
     if IS_EXTERNAL_MODE:
-        st.switch_page("pages/1_Market_View.py")
+        inject_app_theme()
+        _inject_css()
+        st.markdown(f'<div class="rk-title">{escape(t("ranking_title"))}</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="rk-subtitle">{escape("Ranking is available in internal mode only.")}</div>',
+            unsafe_allow_html=True,
+        )
+        st.info("This page is not available in the external demo.")
+        timing_payload = perf.log(mode="external_placeholder")
+        render_internal_timing_summary(timing_payload, enabled=False)
         return
     inject_app_theme()
     _inject_css()
@@ -176,9 +187,10 @@ def main():
         st.session_state["rk_mode"] = mode
     calibre = "stable" if mode == stable_label else "normal"
 
-    snapshot = _prepare_snapshot(load_ranking_snapshot(dwelling, calibre, 0.6 if calibre == "stable" else None))
-    bounds = _safe_bounds(snapshot)
-    max_date = load_daily_rolling("NSW")["date"].max()
+    with perf.track("source_data_load"):
+        snapshot = _prepare_snapshot(load_ranking_snapshot(dwelling, calibre, 0.6 if calibre == "stable" else None))
+        bounds = _safe_bounds(snapshot)
+        max_date = load_daily_rolling("NSW")["date"].max()
 
     region_title = st.session_state.get("rk_region16", t("ranking_all_regions"))
     display_region_title = region_title if region_title != t("ranking_all_regions") else t("ranking_all_regions")
@@ -228,17 +240,26 @@ def main():
         )
 
     calibre = "stable" if st.session_state.get("rk_mode", stable_label) == stable_label else "normal"
-    filtered = _filter_snapshot(snapshot, selected_region16, median_range, sales_range, stable_yoy_range)
+    with perf.track("filter_application"):
+        filtered = _filter_snapshot(snapshot, selected_region16, median_range, sales_range, stable_yoy_range)
     ascending = sort_order == ascending_label
 
-    render_rank_table(
-        filtered.dropna(subset=["Stable YoY", "28d median"]).sort_values("Stable YoY", ascending=ascending).reset_index(drop=True),
-        "Stable YoY",
-        include_asof=True,
-        stable_mode=(calibre == "stable"),
-        height=720,
-        empty_message=t("ranking_empty"),
+    with perf.track("ranking_table_prep"):
+        render_rank_table(
+            filtered.dropna(subset=["Stable YoY", "28d median"]).sort_values("Stable YoY", ascending=ascending).reset_index(drop=True),
+            "Stable YoY",
+            include_asof=True,
+            stable_mode=(calibre == "stable"),
+            height=720,
+            empty_message=t("ranking_empty"),
+        )
+
+    timing_payload = perf.log(
+        dwelling=dwelling,
+        calibre=calibre,
+        rows=int(len(filtered)),
     )
+    render_internal_timing_summary(timing_payload, enabled=not IS_EXTERNAL_MODE)
 
 
 if __name__ == "__main__":
