@@ -4,6 +4,11 @@ import plotly.graph_objects as go
 from .i18n import t, tr
 
 
+DISPLAY_MODE_DUAL = "dual"
+DISPLAY_MODE_SHORT = "short"
+DISPLAY_MODE_LONG = "long"
+
+
 STABLE_COLOR = "#8f4e2e"
 TREND_COLOR = "#2f6c83"
 UNSTABLE_COLOR = "#c4b5a3"
@@ -154,6 +159,22 @@ def _resolve_trend_segments(frame: pd.DataFrame, stable_col: str, trend_tail_col
     return frame[~tail_mask].copy(), frame[tail_mask].copy()
 
 
+def _normalize_display_mode(display_mode: str | None) -> str:
+    value = str(display_mode or "").strip().lower()
+    if value in {DISPLAY_MODE_DUAL, DISPLAY_MODE_SHORT, DISPLAY_MODE_LONG}:
+        return value
+    legacy_map = {
+        "Both": DISPLAY_MODE_DUAL,
+        "Dual": DISPLAY_MODE_DUAL,
+        "双线": DISPLAY_MODE_DUAL,
+        "Short-term only": DISPLAY_MODE_SHORT,
+        "仅短期": DISPLAY_MODE_SHORT,
+        "Long-term only": DISPLAY_MODE_LONG,
+        "仅长期": DISPLAY_MODE_LONG,
+    }
+    return legacy_map.get(str(display_mode or "").strip(), DISPLAY_MODE_DUAL)
+
+
 def build_interactive_chart(
     plot_df: pd.DataFrame,
     level: str,
@@ -193,8 +214,9 @@ def build_interactive_chart(
         fig.update_layout(**_base_layout(380, time_title, t("axis_price")))
         return fig
 
-    show_short = display_mode in {"Both", "Short-term only", "双线", "仅短期"}
-    show_long = display_mode in {"Both", "Long-term only", "双线", "仅长期"}
+    normalized_display_mode = _normalize_display_mode(display_mode)
+    show_short = normalized_display_mode in {DISPLAY_MODE_DUAL, DISPLAY_MODE_SHORT}
+    show_long = normalized_display_mode in {DISPLAY_MODE_DUAL, DISPLAY_MODE_LONG}
     group_col = "series" if level == "NSW" else "region"
     group_label = tr("线条", "Series") if level == "NSW" else t("col_region")
     if group_col not in df.columns:
@@ -355,8 +377,9 @@ def build_band_chart(
         fig.update_layout(**_base_layout(340, t("axis_week"), t("axis_price")))
         return fig
 
-    show_short = display_mode in {"Both", "Short-term only", "双线", "仅短期"}
-    show_long = display_mode in {"Both", "Long-term only", "双线", "仅长期"}
+    normalized_display_mode = _normalize_display_mode(display_mode)
+    show_short = normalized_display_mode in {DISPLAY_MODE_DUAL, DISPLAY_MODE_SHORT}
+    show_long = normalized_display_mode in {DISPLAY_MODE_DUAL, DISPLAY_MODE_LONG}
     bands = sorted(frame[band_col].astype(str).unique().tolist())
     for idx, band_name in enumerate(bands):
         short_color = SERIES_COLORS[idx % len(SERIES_COLORS)]

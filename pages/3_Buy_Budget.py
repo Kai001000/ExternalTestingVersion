@@ -1319,8 +1319,12 @@ def _build_map(filtered: pd.DataFrame, suburb_summary: pd.DataFrame, selected_su
 
 def _listing_card(row: pd.Series, *, key_prefix: str) -> None:
     with st.container(border=True):
-        cols = st.columns([2.2, 1])
-        with cols[0]:
+        if IS_EXTERNAL_MODE:
+            content_col = st.container()
+            image_col = None
+        else:
+            content_col, image_col = st.columns([2.2, 1])
+        with content_col:
             st.markdown(f"### {row['price_display']}")
             st.markdown(f"**{row['address']}**")
             st.caption(f"{row['suburb']} / {row['postcode']}")
@@ -1337,8 +1341,8 @@ def _listing_card(row: pd.Series, *, key_prefix: str) -> None:
             if not IS_EXTERNAL_MODE:
                 with action_cols[1]:
                     st.link_button(tr("打开房源", "Open listing"), row["url"], use_container_width=True)
-        with cols[1]:
-            if pd.notna(row["main_image"]):
+        if image_col is not None and pd.notna(row["main_image"]):
+            with image_col:
                 st.image(row["main_image"], use_container_width=True)
 
 

@@ -5,7 +5,7 @@ import pandas as pd
 import polars as pl
 import streamlit as st
 
-from utils.charts import build_band_chart, build_interactive_chart
+from utils.charts import DISPLAY_MODE_DUAL, DISPLAY_MODE_LONG, DISPLAY_MODE_SHORT, build_band_chart, build_interactive_chart
 from utils.config import BASE_DIR, IS_EXTERNAL_MODE
 from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales
 from utils.i18n import ensure_lang, t
@@ -45,7 +45,42 @@ STABLE_RATIO = 0.6
 LONG_TREND_MIN_MEDIAN_SALES = 20
 LOWER_GEO_LONG_TREND_MIN_MEDIAN_SALES = 5
 TIME_OPTIONS = ["1 Month", "3 Month", "6 Month", "YTD", "1 Year", "3 Year", "5 Year", "10 Year", "Max"]
-LINE_DISPLAY_MODES = [t("display_mode_dual"), t("display_mode_short"), t("display_mode_long")]
+def _display_mode_labels() -> dict[str, str]:
+    return {
+        DISPLAY_MODE_DUAL: t("display_mode_dual"),
+        DISPLAY_MODE_SHORT: t("display_mode_short"),
+        DISPLAY_MODE_LONG: t("display_mode_long"),
+    }
+
+
+def _display_mode_options() -> list[str]:
+    labels = _display_mode_labels()
+    return [labels[DISPLAY_MODE_DUAL], labels[DISPLAY_MODE_SHORT], labels[DISPLAY_MODE_LONG]]
+
+
+def _coerce_display_mode(value: str | None) -> str:
+    labels = _display_mode_labels()
+    reverse = {label: key for key, label in labels.items()}
+    legacy_map = {
+        "Both": DISPLAY_MODE_DUAL,
+        "Dual": DISPLAY_MODE_DUAL,
+        "双线": DISPLAY_MODE_DUAL,
+        "Short-term only": DISPLAY_MODE_SHORT,
+        "仅短期": DISPLAY_MODE_SHORT,
+        "Long-term only": DISPLAY_MODE_LONG,
+        "仅长期": DISPLAY_MODE_LONG,
+    }
+    current = str(value or "").strip()
+    if current in {DISPLAY_MODE_DUAL, DISPLAY_MODE_SHORT, DISPLAY_MODE_LONG}:
+        return current
+    if current in reverse:
+        return reverse[current]
+    return legacy_map.get(current, DISPLAY_MODE_DUAL)
+
+
+def _normalize_display_mode_state(key: str) -> None:
+    stable_value = _coerce_display_mode(st.session_state.get(key))
+    st.session_state[key] = _display_mode_labels()[stable_value]
 
 
 def _inject_market_view_css():
@@ -1345,7 +1380,15 @@ def main():
                     st.selectbox(t("region"), options=region_options, key="mv_chart_region_area", label_visibility="collapsed", placeholder=t("search_suburb_or_postcode"))
             with header_cols[2]:
                 st.markdown(f'<div class="mv-filter-label">{escape(t("display_mode"))}</div>', unsafe_allow_html=True)
-                chart_display_mode = st.selectbox(t("display_mode"), LINE_DISPLAY_MODES, index=0, key="mv_chart_display_mode", label_visibility="collapsed")
+                _normalize_display_mode_state("mv_chart_display_mode")
+                chart_display_mode_label = st.selectbox(
+                    t("display_mode"),
+                    _display_mode_options(),
+                    index=0,
+                    key="mv_chart_display_mode",
+                    label_visibility="collapsed",
+                )
+                chart_display_mode = _coerce_display_mode(chart_display_mode_label)
             chart = build_interactive_chart(
                 plot_df,
                 level=level,
@@ -1394,7 +1437,16 @@ def main():
                     with right_cols[0]:
                         st.markdown(f'<div class="mv-band-inline-label" style="padding-top: 8px; text-align: right;">{escape(t("display_mode"))}</div>', unsafe_allow_html=True)
                     with right_cols[1]:
-                        band_display_mode = st.selectbox(t("display_mode"), LINE_DISPLAY_MODES, index=0, key=f"band_display_mode_{dwelling}", label_visibility="collapsed")
+                        band_key = f"band_display_mode_{dwelling}"
+                        _normalize_display_mode_state(band_key)
+                        band_display_mode_label = st.selectbox(
+                            t("display_mode"),
+                            _display_mode_options(),
+                            index=0,
+                            key=band_key,
+                            label_visibility="collapsed",
+                        )
+                        band_display_mode = _coerce_display_mode(band_display_mode_label)
                 with perf.track("band_chart_prep"):
                     filtered_band = filtered_band.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
                     summary_band = band_data.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
