@@ -1138,9 +1138,9 @@ def _calc_band_summary(filtered: pl.DataFrame, stable_ratio: float) -> tuple[pd.
 
     rows = []
     for band in chart_df["price_band"].dropna().astype(str).unique().tolist():
-        band_df = chart_df[(chart_df["price_band"] == band) & chart_df["rolling_median"].notna()].copy()
+        band_df = chart_df[(chart_df["price_band"] == band) & chart_df["stable"].fillna(False) & chart_df["rolling_median"].notna()].copy()
         if band_df.empty:
-            print(f"[MarketView YoY] band={band} latest_visible_date=None target_date=None match_found=False reason=no_visible_points")
+            print(f"[MarketView YoY] band={band} latest_stable_date=None target_date=None match_found=False reason=no_stable_points")
             rows.append({"band": band, "median": None, "yoy": "insufficient_history", "anchor_date": None})
             continue
         band_df = band_df.sort_values("date")
@@ -1159,7 +1159,7 @@ def _calc_band_summary(filtered: pl.DataFrame, stable_ratio: float) -> tuple[pd.
                 yoy = None
         print(
             f"[MarketView YoY] band={band} "
-            f"latest_visible_date={latest_date.date()} "
+            f"latest_stable_date={latest_date.date()} "
             f"target_date={target_date.date()} "
             f"match_found={match_found}"
         )
