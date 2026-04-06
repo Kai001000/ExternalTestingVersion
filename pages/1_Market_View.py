@@ -41,7 +41,7 @@ PRICE_BANDS = [
     (3_000_000, float("inf"), ">3M"),
 ]
 BAND_NAMES = [band[2] for band in PRICE_BANDS]
-STABLE_RATIO = 0.6
+STABLE_RATIO = 0.55
 LONG_TREND_MIN_MEDIAN_SALES = 20
 LOWER_GEO_LONG_TREND_MIN_MEDIAN_SALES = 5
 TIME_OPTIONS = ["1 Month", "3 Month", "6 Month", "YTD", "1 Year", "3 Year", "5 Year", "10 Year", "Max"]

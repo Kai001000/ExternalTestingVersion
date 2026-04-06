@@ -429,7 +429,7 @@ def build_suburb_rank_snapshot(
 
     if use_stable:
         if stable_ratio is None:
-            stable_ratio = 0.6
+            stable_ratio = 0.55
         snap = _pick_latest_stable_row_per_region(d_valid, stable_ratio=float(stable_ratio), base_sales=None)
     else:
         snap = _pick_latest_valid_row_per_region(d_valid, required_notna=["rolling_median"])
@@ -605,7 +605,7 @@ def build_region_overview_table(
 
     if use_stable:
         if stable_ratio is None:
-            stable_ratio = 0.6
+            stable_ratio = 0.55
         snap = _pick_latest_stable_row_per_region(d_valid, stable_ratio=float(stable_ratio), base_sales=base_sales)
     else:
         snap = _pick_latest_valid_row_per_region(d_valid, required_notna=["rolling_median"])
