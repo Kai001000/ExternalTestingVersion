@@ -1121,7 +1121,7 @@ def _render_page_filter_bar(min_date, max_date):
 
 def _calc_band_summary(filtered: pl.DataFrame, stable_ratio: float) -> tuple[pd.DataFrame, pd.DataFrame]:
     if filtered.is_empty():
-        return pd.DataFrame(), pd.DataFrame(columns=["band", "median", "yoy"])
+        return pd.DataFrame(), pd.DataFrame(columns=["band", "median", "yoy", "anchor_date"])
     global_max = filtered["date"].max()
     one_year_ago = global_max - pd.DateOffset(years=1)
     base_data = filtered.filter(pl.col("date") >= one_year_ago)
@@ -1138,10 +1138,10 @@ def _calc_band_summary(filtered: pl.DataFrame, stable_ratio: float) -> tuple[pd.
 
     rows = []
     for band in chart_df["price_band"].dropna().astype(str).unique().tolist():
-        band_df = chart_df[(chart_df["price_band"] == band) & chart_df["stable"].fillna(False) & chart_df["rolling_median"].notna()].copy()
+        band_df = chart_df[(chart_df["price_band"] == band) & chart_df["rolling_median"].notna()].copy()
         if band_df.empty:
-            print(f"[MarketView YoY] band={band} latest_stable_date=None target_date=None match_found=False reason=no_stable_points")
-            rows.append({"band": band, "median": None, "yoy": "insufficient_history"})
+            print(f"[MarketView YoY] band={band} latest_visible_date=None target_date=None match_found=False reason=no_visible_points")
+            rows.append({"band": band, "median": None, "yoy": "insufficient_history", "anchor_date": None})
             continue
         band_df = band_df.sort_values("date")
         latest = band_df.iloc[-1]
@@ -1159,11 +1159,11 @@ def _calc_band_summary(filtered: pl.DataFrame, stable_ratio: float) -> tuple[pd.
                 yoy = None
         print(
             f"[MarketView YoY] band={band} "
-            f"latest_stable_date={latest_date.date()} "
+            f"latest_visible_date={latest_date.date()} "
             f"target_date={target_date.date()} "
             f"match_found={match_found}"
         )
-        rows.append({"band": band, "median": latest["rolling_median"], "yoy": yoy})
+        rows.append({"band": band, "median": latest["rolling_median"], "yoy": yoy, "anchor_date": latest_date})
     return chart_df, pd.DataFrame(rows)
 
 
@@ -1449,9 +1449,7 @@ def main():
                         band_display_mode = _coerce_display_mode(band_display_mode_label)
                 with perf.track("band_chart_prep"):
                     filtered_band = filtered_band.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
-                    summary_band = band_data.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
-                    chart_band_df, _ = _calc_band_summary(filtered_band, stable_ratio)
-                    _, band_summary = _calc_band_summary(summary_band, stable_ratio)
+                    chart_band_df, band_summary = _calc_band_summary(filtered_band, stable_ratio)
                 if chart_band_df.empty:
                     st.info(t("market_view_no_band_filtered_data"))
                 else:
