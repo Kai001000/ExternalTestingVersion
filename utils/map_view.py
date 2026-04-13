@@ -6,6 +6,16 @@ import pandas as pd
 
 _WORLD_TILE_SIZE = 256.0
 _DEFAULT_CENTER = {"lat": -32.8, "lon": 147.0}
+NSW_MAP_BOUNDS = {
+    "west": 140.8,
+    "east": 154.7,
+    "south": -37.7,
+    "north": -28.0,
+}
+NSW_DEFAULT_CENTER = {"lat": -32.4, "lon": 147.0}
+NSW_DEFAULT_ZOOM = 5.35
+NSW_MIN_ZOOM = 5.1
+NSW_MAX_ZOOM = 12.2
 
 
 def _coerce_number(value: Any) -> float | None:
@@ -153,3 +163,16 @@ def resolve_budget_map_view(
         "lon": float(pd.to_numeric(center_source[lon_col], errors="coerce").dropna().median()),
     }
     return center, 5.0
+
+
+def clamp_to_nsw_map_view(center: dict[str, float] | None, zoom: float | None) -> tuple[dict[str, float], float]:
+    current_center = dict(center or NSW_DEFAULT_CENTER)
+    lat = float(current_center.get("lat", NSW_DEFAULT_CENTER["lat"]))
+    lon = float(current_center.get("lon", NSW_DEFAULT_CENTER["lon"]))
+    clamped_center = {
+        "lat": min(max(lat, NSW_MAP_BOUNDS["south"]), NSW_MAP_BOUNDS["north"]),
+        "lon": min(max(lon, NSW_MAP_BOUNDS["west"]), NSW_MAP_BOUNDS["east"]),
+    }
+    clamped_zoom = float(NSW_DEFAULT_ZOOM if zoom is None else zoom)
+    clamped_zoom = max(min(clamped_zoom, NSW_MAX_ZOOM), NSW_MIN_ZOOM)
+    return clamped_center, clamped_zoom

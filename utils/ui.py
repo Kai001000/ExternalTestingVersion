@@ -70,27 +70,49 @@ def inject_app_theme():
     )
 
 
-def sidebar_common() -> dict:
+def external_language_switch(*, key: str = "global_lang_switch", label_visibility: str = "collapsed") -> str:
     lang_options = language_options()
-    st.markdown(f"**{t('lang')}**")
+    current_lang = get_lang()
     selected_lang = st.radio(
         t("lang"),
         options=lang_options,
-        index=lang_options.index(get_lang()),
+        index=lang_options.index(current_lang),
         format_func=language_label,
         horizontal=True,
-        key="global_lang_switch",
-        label_visibility="collapsed",
+        key=key,
+        label_visibility=label_visibility,
     )
-    set_lang(selected_lang)
+    if selected_lang != current_lang:
+        set_lang(selected_lang)
+        st.rerun()
+    return selected_lang
 
-    st.markdown("---")
-    st.markdown(f"**{t('sidebar_dwelling_title')}**")
-    dwelling = st.radio(
-        t("dwelling_group"),
-        options=["HOUSE", "UNIT"],
-        format_func=lambda value: t("dwelling_house") if value == "HOUSE" else t("dwelling_unit"),
-        horizontal=True,
-        key="dwelling_group",
+
+def render_external_page_header(*, badge: str, title: str, note: str) -> None:
+    st.markdown(
+        f"<div class='budget-kicker'>{badge}</div>",
+        unsafe_allow_html=True,
     )
+    st.markdown(f"<div class='budget-title'>{title}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='budget-note'>{note}</div>", unsafe_allow_html=True)
+
+
+def sidebar_common(*, include_dwelling: bool = True) -> dict:
+    st.markdown(f"**{t('lang')}**")
+    external_language_switch(key="global_lang_switch")
+
+    if "dwelling_group" not in st.session_state:
+        st.session_state["dwelling_group"] = "HOUSE"
+
+    dwelling = st.session_state["dwelling_group"]
+    if include_dwelling:
+        st.markdown("---")
+        st.markdown(f"**{t('sidebar_dwelling_title')}**")
+        dwelling = st.radio(
+            t("dwelling_group"),
+            options=["HOUSE", "UNIT"],
+            format_func=lambda value: t("dwelling_house") if value == "HOUSE" else t("dwelling_unit"),
+            horizontal=True,
+            key="dwelling_group",
+        )
     return {"dwelling": dwelling}

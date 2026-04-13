@@ -1,4 +1,6 @@
+import json
 from html import escape
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -8,7 +10,7 @@ import streamlit as st
 from utils.charts import DISPLAY_MODE_DUAL, DISPLAY_MODE_LONG, DISPLAY_MODE_SHORT, build_band_chart, build_interactive_chart
 from utils.config import BASE_DIR, IS_EXTERNAL_MODE
 from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales
-from utils.i18n import ensure_lang, t
+from utils.i18n import ensure_lang, t, tr
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_float0, fmt_int, fmt_pct
 from utils.ui import inject_app_theme, sidebar_common
@@ -593,15 +595,15 @@ def _preset_start_end(min_date: pd.Timestamp, max_date: pd.Timestamp, preset: st
 
 def _preset_label(preset: str) -> str:
     return {
-        "1 Month": "过去1个月",
-        "3 Month": "过去3个月",
-        "6 Month": "过去6个月",
-        "YTD": "今年以来",
-        "1 Year": "过去12个月",
-        "3 Year": "过去3年",
-        "5 Year": "过去5年",
-        "10 Year": "过去10年",
-        "Max": "全部时间",
+        "1 Month": tr("过去1个月", "Past 1 month"),
+        "3 Month": tr("过去3个月", "Past 3 months"),
+        "6 Month": tr("过去6个月", "Past 6 months"),
+        "YTD": tr("今年以来", "Year to date"),
+        "1 Year": tr("过去12个月", "Past 12 months"),
+        "3 Year": tr("过去3年", "Past 3 years"),
+        "5 Year": tr("过去5年", "Past 5 years"),
+        "10 Year": tr("过去10年", "Past 10 years"),
+        "Max": tr("全部时间", "All time"),
     }.get(preset, preset)
 
 
@@ -673,7 +675,11 @@ def _trend_value_html(value) -> str:
 def _band_yoy_pill_html(value) -> str:
     if isinstance(value, str):
         if value == "insufficient_history":
-            return '<span class="mv-band-yoy-pill mv-band-yoy-pill-flat"><span class="mv-band-yoy-arrow mv-band-yoy-arrow-flat"></span>Insufficient history</span>'
+            label = t("insufficient_history")
+            return f'<span class="mv-band-yoy-pill mv-band-yoy-pill-flat"><span class="mv-band-yoy-arrow mv-band-yoy-arrow-flat"></span>{escape(label)}</span>'
+        if value == "no_prior_stable_match":
+            label = t("no_prior_stable_match")
+            return f'<span class="mv-band-yoy-pill mv-band-yoy-pill-flat"><span class="mv-band-yoy-arrow mv-band-yoy-arrow-flat"></span>{escape(label)}</span>'
         return f'<span class="mv-band-yoy-pill mv-band-yoy-pill-flat"><span class="mv-band-yoy-arrow mv-band-yoy-arrow-flat"></span>{escape(value)}</span>'
     if value is None or pd.isna(value):
         return '<span class="mv-band-yoy-pill mv-band-yoy-pill-flat"><span class="mv-band-yoy-arrow mv-band-yoy-arrow-flat"></span>N/A</span>'
@@ -691,7 +697,10 @@ def _band_yoy_pill_html(value) -> str:
 
 
 def _dwelling_label(dwelling: str) -> str:
-    return {"HOUSE": "House", "UNIT": "Unit"}.get(dwelling, dwelling.title())
+    return {
+        "HOUSE": tr("House", "House"),
+        "UNIT": tr("Unit", "Unit"),
+    }.get(dwelling, dwelling.title())
 
 
 def _render_metric_card(container, label: str, body_html: str, subtext: str | None = None, *, body_caption: str | None = None):
@@ -732,29 +741,67 @@ def _empty_focus_metrics() -> dict[str, object]:
     return {
         "latest_median": None,
         "latest_point": None,
+        "latest_stable_point": None,
+        "latest_available_point": None,
+        "latest_visible_point": None,
         "range_high": None,
         "range_low": None,
         "stable_yoy": None,
         "sales": None,
+        "display_anchor_is_fallback": False,
     }
 
 
 def _build_focus_metrics(summary_full_df: pd.DataFrame, summary_visible_df: pd.DataFrame) -> dict[str, object]:
+    fallback_gap_days = 7
+    latest_available_point = None
+    latest_visible_point = None
+    if not summary_full_df.empty and "date" in summary_full_df.columns:
+        full_dates = pd.to_datetime(summary_full_df["date"], errors="coerce").dt.normalize().dropna()
+        if not full_dates.empty:
+            latest_available_point = full_dates.max()
+    if not summary_visible_df.empty and "date" in summary_visible_df.columns:
+        visible_dates = pd.to_datetime(summary_visible_df["date"], errors="coerce").dt.normalize().dropna()
+        if not visible_dates.empty:
+            latest_visible_point = visible_dates.max()
     stable_full_df = summary_full_df[summary_full_df["stable"].fillna(False) & summary_full_df["rolling_median"].notna()].copy()
     if stable_full_df.empty:
-        return _empty_focus_metrics()
+        metrics = _empty_focus_metrics()
+        metrics["latest_available_point"] = latest_available_point
+        metrics["latest_visible_point"] = latest_visible_point
+        return metrics
     stable_full_df["date"] = pd.to_datetime(stable_full_df["date"], errors="coerce").dt.normalize()
     stable_full_df = stable_full_df[stable_full_df["date"].notna()].copy()
     if stable_full_df.empty:
-        return _empty_focus_metrics()
+        metrics = _empty_focus_metrics()
+        metrics["latest_available_point"] = latest_available_point
+        metrics["latest_visible_point"] = latest_visible_point
+        return metrics
     stable_full_df = stable_full_df.sort_values("date")
-    latest = stable_full_df.iloc[-1]
+    latest_stable = stable_full_df.iloc[-1]
+    latest_stable_point = pd.to_datetime(latest_stable["date"], errors="coerce").normalize()
+    display_row = latest_stable
+    display_anchor_is_fallback = False
+    if latest_available_point is not None and pd.notna(latest_stable_point):
+        gap_days = (latest_available_point - latest_stable_point).days
+        if gap_days >= fallback_gap_days:
+            candidate_df = summary_full_df.copy()
+            candidate_df["date"] = pd.to_datetime(candidate_df["date"], errors="coerce").dt.normalize()
+            candidate_df = candidate_df[
+                candidate_df["date"].notna()
+                & candidate_df["rolling_median"].notna()
+                & (candidate_df["date"] > latest_stable_point)
+                & (~candidate_df["stable"].fillna(False))
+            ].sort_values("date")
+            if not candidate_df.empty:
+                display_row = candidate_df.iloc[0]
+                display_anchor_is_fallback = True
     yoy_ref = stable_full_df[["region", "date", "rolling_median"]].rename(columns={"rolling_median": "median_365d"})
     yoy_ref["date"] = pd.to_datetime(yoy_ref["date"], errors="coerce").dt.normalize() + pd.Timedelta(days=365)
     latest_key = pd.DataFrame(
         {
-            "region": [latest["region"]],
-            "date": [pd.to_datetime(latest["date"], errors="coerce").normalize()],
+            "region": [display_row["region"]],
+            "date": [pd.to_datetime(display_row["date"], errors="coerce").normalize()],
         }
     )
     latest_key["date"] = pd.to_datetime(latest_key["date"], errors="coerce").dt.normalize()
@@ -762,7 +809,7 @@ def _build_focus_metrics(summary_full_df: pd.DataFrame, summary_visible_df: pd.D
     median_365d = latest_with_yoy["median_365d"].iloc[0] if not latest_with_yoy.empty else None
     stable_yoy = None
     if median_365d is not None and not pd.isna(median_365d) and float(median_365d) != 0:
-        stable_yoy = latest["rolling_median"] / median_365d - 1.0
+        stable_yoy = display_row["rolling_median"] / median_365d - 1.0
     stable_visible_df = summary_visible_df[summary_visible_df["stable"].fillna(False) & summary_visible_df["rolling_median"].notna()].copy()
     range_high = None
     range_low = None
@@ -770,12 +817,16 @@ def _build_focus_metrics(summary_full_df: pd.DataFrame, summary_visible_df: pd.D
         range_high = stable_visible_df["rolling_median"].max()
         range_low = stable_visible_df["rolling_median"].min()
     return {
-        "latest_median": latest["rolling_median"],
-        "latest_point": latest["date"],
+        "latest_median": display_row["rolling_median"],
+        "latest_point": display_row["date"],
+        "latest_stable_point": latest_stable["date"],
+        "latest_available_point": latest_available_point,
+        "latest_visible_point": latest_visible_point,
         "range_high": range_high,
         "range_low": range_low,
         "stable_yoy": stable_yoy,
-        "sales": latest.get("sales_28d"),
+        "sales": display_row.get("sales_28d"),
+        "display_anchor_is_fallback": display_anchor_is_fallback,
     }
 
 
@@ -874,6 +925,11 @@ def _render_main_kpis_compact(metrics: dict[str, object], region_label: str, pre
 
 def _render_main_kpis_clean(metrics: dict[str, object], region_label: str, preset: str, dwelling: str):
     latest_point = fmt_date(metrics["latest_point"]) if metrics["latest_point"] is not None and not pd.isna(metrics["latest_point"]) else None
+    latest_available_point = (
+        fmt_date(metrics["latest_available_point"])
+        if metrics.get("latest_available_point") is not None and not pd.isna(metrics.get("latest_available_point"))
+        else None
+    )
     context_label = f"{_preset_label(preset)} · {_dwelling_label(dwelling)}"
     latest_median_text = _format_currency(metrics["latest_median"])
     stable_yoy = metrics["stable_yoy"]
@@ -891,19 +947,24 @@ def _render_main_kpis_clean(metrics: dict[str, object], region_label: str, prese
     c1, c2, c3 = st.columns(3)
     with c1:
         with st.container(border=True):
-            st.caption("区域")
+            st.caption(t("col_region"))
             st.markdown(f"### {region_label}")
             st.caption(context_label)
     with c2:
         with st.container(border=True):
-            st.caption("最新稳定中位价")
+            st.caption(t("stable_median_price"))
             st.markdown(f"### {latest_median_text}")
-            st.caption(f"截至 {latest_point}" if latest_point else "截至 N/A")
+            st.caption(f"{t('stable_as_of')} {latest_point}" if latest_point else f"{t('stable_as_of')} N/A")
+            if latest_available_point and latest_available_point != latest_point:
+                st.caption(f"{t('market_data_loaded_to')} {latest_available_point}")
     with c3:
         with st.container(border=True):
-            st.caption("稳定同比")
+            st.caption(t("stable_yoy"))
             st.markdown(f"### {yoy_text}")
-            st.caption("vs 去年同日稳定点")
+            st.caption(t("vs_same_date_last_year"))
+
+    if latest_available_point and latest_available_point != latest_point:
+        st.caption(t("market_view_stability_note"))
 
     range_low = _format_currency(metrics["range_low"])
     range_high = _format_currency(metrics["range_high"])
@@ -912,31 +973,29 @@ def _render_main_kpis_clean(metrics: dict[str, object], region_label: str, prese
     c4, c5 = st.columns(2)
     with c4:
         with st.container(border=True):
-            st.caption("稳定价格区间")
+            st.caption(t("median_range"))
             col_low, col_high = st.columns(2)
             with col_low:
-                st.caption("最低价")
+                st.caption(t("min_value"))
                 st.markdown(f"**{range_low}**")
             with col_high:
-                st.caption("最高价")
+                st.caption(t("max_value"))
                 st.markdown(f"**{range_high}**")
-            st.caption("当前区域稳定价格范围")
+            st.caption(tr("当前区域稳定价格范围", "Current stable price range for this area"))
     with c5:
         with st.container(border=True):
-            st.caption("28天成交量")
+            st.caption(t("sales_28d"))
             st.markdown(f"### {sales_text}")
-            st.caption("最新稳定点滚动成交")
+            st.caption(tr("最新稳定点滚动成交", "Rolling sales at the latest stable point"))
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_price_band_data(dwelling: str) -> pl.DataFrame:
-    fact = load_filtered_fact_sales()
-    if fact.is_empty():
-        return pl.DataFrame()
-    fact = fact.filter(
-        pl.col("dwelling_group") == dwelling,
-        pl.col("purchase_price").is_not_null(),
-        pl.col("purchase_price") >= ANALYTICS_PRICE_MIN,
-        pl.col("purchase_price") <= ANALYTICS_PRICE_MAX,
-    )
+def _price_band_cache_paths(dwelling: str) -> tuple[Path, Path]:
+    cache_dir = BASE_DIR / "data" / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    slug = str(dwelling).strip().lower()
+    return cache_dir / f"market_view_price_band_{slug}.parquet", cache_dir / f"market_view_price_band_{slug}.meta.json"
+
+
+def _compute_price_band_data(fact: pl.DataFrame) -> pl.DataFrame:
     if fact.is_empty():
         return pl.DataFrame()
 
@@ -977,6 +1036,40 @@ def load_price_band_data(dwelling: str) -> pl.DataFrame:
         band_frame = band_pd.reset_index()[["date", "price_band", "rolling_median", "sales_28d", "mom", "qoq"]]
         results.append(pl.DataFrame(band_frame.to_dict(orient="list")))
     return pl.concat(results) if results else pl.DataFrame()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_price_band_data(dwelling: str) -> pl.DataFrame:
+    fact = load_filtered_fact_sales()
+    if fact.is_empty():
+        return pl.DataFrame()
+    fact = fact.filter(
+        pl.col("dwelling_group") == dwelling,
+        pl.col("purchase_price").is_not_null(),
+        pl.col("purchase_price") >= ANALYTICS_PRICE_MIN,
+        pl.col("purchase_price") <= ANALYTICS_PRICE_MAX,
+    )
+    if fact.is_empty():
+        return pl.DataFrame()
+    cache_path, meta_path = _price_band_cache_paths(dwelling)
+    signature = {
+        "dwelling": str(dwelling),
+        "rows": int(fact.height),
+        "max_date": str(fact["date"].max()),
+    }
+    if cache_path.exists() and meta_path.exists():
+        try:
+            cached_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if cached_meta == signature:
+                return pl.read_parquet(cache_path)
+        except Exception:
+            pass
+
+    result = _compute_price_band_data(fact)
+    if not result.is_empty():
+        result.write_parquet(cache_path)
+        meta_path.write_text(json.dumps(signature), encoding="utf-8")
+    return result
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -1086,19 +1179,57 @@ def _resolve_region_selection(level: str, region_value_map: dict[str, str]):
         return ["NSW"], "NSW"
     if level in {"REGION", "REGION16"}:
         selected = st.session_state.get(f"mv_chart_region_{level.lower()}")
-        return ([selected] if selected else []), selected or "未选择区域"
+        return ([selected] if selected else []), selected or tr("未选择区域", "No region selected")
     selected_label = st.session_state.get("mv_chart_region_area")
     selected_value = region_value_map.get(selected_label) if selected_label else None
-    return ([selected_value] if selected_value else []), selected_label or "未选择区域"
+    return ([selected_value] if selected_value else []), selected_label or tr("未选择区域", "No region selected")
 
 
 def _render_topbar(badge_date):
     st.title(t("market_view_title"))
     st.caption(t("market_view_note"))
     st.markdown(
-        f'<div><span class="mv-badge">{escape(t("data_as_of"))} {escape(fmt_date(badge_date))}</span></div>',
+        (
+            f'<div><span class="mv-badge">{escape(tr("Public Beta", "Public Beta"))}</span> '
+            f'<span class="mv-badge">{escape(t("data_as_of"))} {escape(fmt_date(badge_date))}</span></div>'
+        ),
         unsafe_allow_html=True,
     )
+
+
+def _render_external_dwelling_switch(current_dwelling: str) -> str:
+    if "mv_dwelling_group_main" not in st.session_state:
+        st.session_state["mv_dwelling_group_main"] = current_dwelling
+    st.markdown(f"**{tr('房产类型', 'Dwelling type')}**")
+    picked = st.radio(
+        tr("房产类型", "Dwelling type"),
+        options=["HOUSE", "UNIT"],
+        format_func=lambda value: tr("House", "House") if value == "HOUSE" else tr("Unit", "Unit"),
+        horizontal=True,
+        key="mv_dwelling_group_main",
+        label_visibility="collapsed",
+    )
+    if picked != current_dwelling:
+        st.session_state["dwelling_group"] = picked
+        st.session_state["mv_dwelling_group_main"] = picked
+        st.rerun()
+    st.caption(
+        tr(
+            "切换 House / Unit，快速查看不同房型的价格趋势与成交变化。",
+            "Switch between house and unit to compare price trends and sales momentum.",
+        )
+    )
+    return picked
+
+
+def _resolve_external_dwelling_state(default_dwelling: str) -> str:
+    current = st.session_state.get("mv_dwelling_group_main")
+    if current not in {"HOUSE", "UNIT"}:
+        current = default_dwelling if default_dwelling in {"HOUSE", "UNIT"} else "HOUSE"
+        st.session_state["mv_dwelling_group_main"] = current
+    if st.session_state.get("dwelling_group") != current:
+        st.session_state["dwelling_group"] = current
+    return current
 
 
 def _render_page_filter_bar(min_date, max_date):
@@ -1119,9 +1250,9 @@ def _render_page_filter_bar(min_date, max_date):
     return level, preset, start_ts, end_ts, stable_ratio
 
 
-def _calc_band_summary(filtered: pl.DataFrame, stable_ratio: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _build_band_chart_frame(filtered: pl.DataFrame, stable_ratio: float) -> pd.DataFrame:
     if filtered.is_empty():
-        return pd.DataFrame(), pd.DataFrame(columns=["band", "median", "yoy", "anchor_date"])
+        return pd.DataFrame()
     global_max = filtered["date"].max()
     one_year_ago = global_max - pd.DateOffset(years=1)
     base_data = filtered.filter(pl.col("date") >= one_year_ago)
@@ -1134,22 +1265,29 @@ def _calc_band_summary(filtered: pl.DataFrame, stable_ratio: float) -> tuple[pd.
     chart_df["date"] = pd.to_datetime(chart_df["date"]).dt.normalize()
     chart_df["base_sales"] = chart_df["price_band"].map(base_sales).fillna(0)
     chart_df["raw_stable"] = chart_df["sales_28d"] >= chart_df["base_sales"] * stable_ratio
-    chart_df = apply_right_edge_stability_rule(chart_df, ["price_band"], "date", "raw_stable", "stable")
+    return apply_right_edge_stability_rule(chart_df, ["price_band"], "date", "raw_stable", "stable")
+
+
+def _calc_band_summary(visible_filtered: pl.DataFrame, full_history: pl.DataFrame, stable_ratio: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if visible_filtered.is_empty():
+        return pd.DataFrame(), pd.DataFrame(columns=["band", "median", "yoy", "anchor_date"])
+    chart_df = _build_band_chart_frame(visible_filtered, stable_ratio)
+    full_history_df = _build_band_chart_frame(full_history, stable_ratio)
 
     rows = []
-    for band in chart_df["price_band"].dropna().astype(str).unique().tolist():
-        band_df = chart_df[(chart_df["price_band"] == band) & chart_df["stable"].fillna(False) & chart_df["rolling_median"].notna()].copy()
-        if band_df.empty:
+    for band in full_history_df["price_band"].dropna().astype(str).unique().tolist():
+        full_band_df = full_history_df[(full_history_df["price_band"] == band) & full_history_df["stable"].fillna(False) & full_history_df["rolling_median"].notna()].copy()
+        if full_band_df.empty:
             print(f"[MarketView YoY] band={band} latest_stable_date=None target_date=None match_found=False reason=no_stable_points")
             rows.append({"band": band, "median": None, "yoy": "insufficient_history", "anchor_date": None})
             continue
-        band_df = band_df.sort_values("date")
-        latest = band_df.iloc[-1]
+        full_band_df = full_band_df.sort_values("date")
+        latest = full_band_df.iloc[-1]
         latest_date = pd.to_datetime(latest["date"]).normalize()
-        target_date = latest_date - pd.Timedelta(days=365)
-        ref_df = band_df.assign(date_gap=(band_df["date"] - target_date).abs())
+        target_date = latest_date - pd.DateOffset(years=1)
+        ref_df = full_band_df.assign(date_gap=(full_band_df["date"] - target_date).abs())
         ref_df = ref_df[ref_df["date_gap"] <= pd.Timedelta(days=14)].sort_values(["date_gap", "date"])
-        yoy = "insufficient_history"
+        yoy = "no_prior_stable_match"
         match_found = not ref_df.empty
         if not ref_df.empty:
             ref_price = ref_df.iloc[0]["rolling_median"]
@@ -1161,7 +1299,8 @@ def _calc_band_summary(filtered: pl.DataFrame, stable_ratio: float) -> tuple[pd.
             f"[MarketView YoY] band={band} "
             f"latest_stable_date={latest_date.date()} "
             f"target_date={target_date.date()} "
-            f"match_found={match_found}"
+            f"match_found={match_found} "
+            f"reason={'matched' if match_found else 'no_prior_stable_match_in_full_history'}"
         )
         rows.append({"band": band, "median": latest["rolling_median"], "yoy": yoy, "anchor_date": latest_date})
     return chart_df, pd.DataFrame(rows)
@@ -1282,8 +1421,10 @@ def main():
     _inject_market_view_css()
 
     with st.sidebar:
-        opts = sidebar_common()
+        opts = sidebar_common(include_dwelling=not IS_EXTERNAL_MODE)
     dwelling = opts["dwelling"]
+    if IS_EXTERNAL_MODE:
+        dwelling = _resolve_external_dwelling_state(dwelling)
 
     with perf.track("source_data_load"):
         seed_daily = load_daily_rolling("NSW")
@@ -1293,6 +1434,8 @@ def main():
     min_date = seed_daily["date"].min()
     max_date = seed_daily["date"].max()
     _render_topbar(max_date)
+    if IS_EXTERNAL_MODE:
+        dwelling = _render_external_dwelling_switch(dwelling)
     level, preset, start_ts, end_ts, stable_ratio = _render_page_filter_bar(min_date, max_date)
     with perf.track("level_data_load"):
         current_daily = _load_level_daily(level)
@@ -1449,7 +1592,8 @@ def main():
                         band_display_mode = _coerce_display_mode(band_display_mode_label)
                 with perf.track("band_chart_prep"):
                     filtered_band = filtered_band.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
-                    chart_band_df, band_summary = _calc_band_summary(filtered_band, stable_ratio)
+                    full_band_history = band_data.filter(pl.col("price_band").is_in(selected_bands)) if selected_bands else pl.DataFrame()
+                    chart_band_df, band_summary = _calc_band_summary(filtered_band, full_band_history, stable_ratio)
                 if chart_band_df.empty:
                     st.info(t("market_view_no_band_filtered_data"))
                 else:

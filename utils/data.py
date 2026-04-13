@@ -1,3 +1,5 @@
+import json
+import math
 import re
 from pathlib import Path
 
@@ -28,6 +30,10 @@ ADAPTIVE_LOWER_MULTIPLIER = 0.7
 ADAPTIVE_UPPER_MULTIPLIER = 1.5
 ADAPTIVE_MIN_HISTORY_ROWS = 50
 ALLOWED_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
+EXTERNAL_SALE_DISPLAY_MIN_PRICE = 50_000
+EXTERNAL_SALE_DISPLAY_MAX_PRICE = 10_000_000
+EXTERNAL_RENT_DISPLAY_MIN_WEEKLY = 80
+EXTERNAL_RENT_DISPLAY_MAX_WEEKLY = 5_000
 DOMAIN_LISTING_COLUMNS = [
     "listing_id",
     "url",
@@ -145,6 +151,356 @@ def format_price(value, *, prefix: str = "$", na_label: str = "N/A") -> str:
     if value is None or pd.isna(value):
         return na_label
     return f"{prefix}{int(round(float(value))):,}"
+
+
+COMMUTE_MODE_CONFIG: dict[str, dict[str, float]] = {
+    "drive": {"speed_kmh": 32.0, "fixed_minutes": 7.0, "distance_multiplier": 1.28},
+    "transit": {"speed_kmh": 18.0, "fixed_minutes": 12.0, "distance_multiplier": 1.55},
+    "walk": {"speed_kmh": 4.6, "fixed_minutes": 0.0, "distance_multiplier": 1.10},
+}
+
+
+def normalize_suburb_key(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    text = str(value).upper().strip()
+    text = re.sub(r"\([^)]*\)", "", text)
+    text = text.replace("-", " ").replace("&", " AND ").replace("'", "")
+    text = re.sub(r"\bMT\b", "MOUNT", text)
+    text = re.sub(r"\bNSW\b", "", text)
+    text = re.sub(r"[^A-Z0-9 ]+", " ", text)
+    return " ".join(text.split())
+
+
+def _flatten_coords(node: object) -> list[tuple[float, float]]:
+    if not isinstance(node, list) or not node:
+        return []
+    if isinstance(node[0], (int, float)) and len(node) >= 2:
+        return [(float(node[0]), float(node[1]))]
+    points: list[tuple[float, float]] = []
+    for item in node:
+        points.extend(_flatten_coords(item))
+    return points
+
+
+def _geometry_centroid(geometry: dict[str, object] | None) -> tuple[float | None, float | None]:
+    coords = _flatten_coords((geometry or {}).get("coordinates"))
+    if not coords:
+        return None, None
+    lon = sum(point[0] for point in coords) / len(coords)
+    lat = sum(point[1] for point in coords) / len(coords)
+    return lat, lon
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_nsw_suburb_centroids() -> pd.DataFrame:
+    path = BASE_DIR / "Reference" / "ABS" / "nsw_suburbs.geojson"
+    columns = ["geo_suburb_key", "boundary_suburb_name", "boundary_latitude", "boundary_longitude"]
+    if not path.exists():
+        return pd.DataFrame(columns=columns)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows: list[dict[str, object]] = []
+    for idx, feature in enumerate(payload.get("features", [])):
+        properties = feature.get("properties", {}) if isinstance(feature, dict) else {}
+        suburb_name = properties.get("suburb_name") or properties.get("SSC_NAME21") or properties.get("name")
+        suburb_key = properties.get("join_key") or normalize_suburb_key(suburb_name)
+        if not suburb_key:
+            continue
+        lat, lon = _geometry_centroid(feature.get("geometry"))
+        rows.append(
+            {
+                "feature_id": str(properties.get("feature_id") or properties.get("suburb_code") or idx),
+                "geo_suburb_key": suburb_key,
+                "boundary_suburb_name": suburb_name,
+                "boundary_latitude": lat,
+                "boundary_longitude": lon,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(columns=columns)
+
+    polygon_df = pd.DataFrame(rows)
+    return (
+        polygon_df.groupby("geo_suburb_key", dropna=False)
+        .agg(
+            boundary_suburb_name=("boundary_suburb_name", "first"),
+            boundary_latitude=("boundary_latitude", "mean"),
+            boundary_longitude=("boundary_longitude", "mean"),
+        )
+        .reset_index()
+    )
+
+
+def build_listing_location_lookup(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["geo_suburb_key", "suburb", "postcode", "latitude", "longitude"])
+
+    working = df.copy()
+    working["suburb"] = _clean_string_series(working.get("suburb", pd.Series(dtype="string")))
+    working["postcode"] = _clean_string_series(working.get("postcode", pd.Series(dtype="string")))
+    working["latitude"] = pd.to_numeric(working.get("latitude"), errors="coerce")
+    working["longitude"] = pd.to_numeric(working.get("longitude"), errors="coerce")
+    working = working.loc[
+        working["suburb"].notna()
+        & working["latitude"].notna()
+        & working["longitude"].notna()
+    ].copy()
+    if working.empty:
+        return pd.DataFrame(columns=["geo_suburb_key", "suburb", "postcode", "latitude", "longitude"])
+
+    working["geo_suburb_key"] = working["suburb"].map(normalize_suburb_key)
+    return (
+        working.groupby("geo_suburb_key", dropna=False)
+        .agg(
+            suburb=("suburb", "first"),
+            postcode=("postcode", "first"),
+            latitude=("latitude", "median"),
+            longitude=("longitude", "median"),
+        )
+        .reset_index()
+    )
+
+
+def build_suburb_centroid_lookup(df: pd.DataFrame) -> pd.DataFrame:
+    listing_centroids = build_listing_location_lookup(df)
+    boundary_centroids = load_nsw_suburb_centroids()
+
+    if boundary_centroids.empty and listing_centroids.empty:
+        return pd.DataFrame(columns=["geo_suburb_key", "suburb", "postcode", "centroid_latitude", "centroid_longitude"])
+
+    merged = listing_centroids.merge(boundary_centroids, on="geo_suburb_key", how="outer")
+    merged["suburb"] = merged["suburb"].fillna(merged["boundary_suburb_name"])
+    merged["centroid_latitude"] = merged["boundary_latitude"].fillna(merged["latitude"])
+    merged["centroid_longitude"] = merged["boundary_longitude"].fillna(merged["longitude"])
+    return merged.loc[
+        merged["suburb"].notna()
+        & merged["centroid_latitude"].notna()
+        & merged["centroid_longitude"].notna()
+    , ["geo_suburb_key", "suburb", "postcode", "centroid_latitude", "centroid_longitude"]].copy()
+
+
+def resolve_commute_origin(query: str, suburb_lookup: pd.DataFrame, listing_df: pd.DataFrame) -> dict[str, object]:
+    text = str(query or "").strip()
+    if not text:
+        return {"matched": False, "reason": "empty"}
+
+    clean = " ".join(text.split())
+    clean_key = normalize_suburb_key(clean)
+    suburb_only_key = normalize_suburb_key(re.sub(r"\b\d{4}\b", " ", clean))
+    digits = re.sub(r"[^\d]", "", clean)
+    postcode = digits[:4] if len(digits) >= 4 else ""
+
+    if clean_key and not suburb_lookup.empty:
+        suburb_candidates = [key for key in [clean_key, suburb_only_key] if key]
+        for suburb_candidate in suburb_candidates:
+            suburb_match = suburb_lookup.loc[suburb_lookup["geo_suburb_key"] == suburb_candidate].copy()
+            if suburb_match.empty:
+                suburb_match = suburb_lookup.loc[
+                    suburb_lookup["suburb"].astype("string").str.upper().str.contains(suburb_candidate, na=False)
+                ].copy()
+            if not suburb_match.empty:
+                row = suburb_match.iloc[0]
+                return {
+                    "matched": True,
+                    "match_type": "suburb",
+                    "label": str(row["suburb"]),
+                    "origin_query": clean,
+                    "latitude": float(row["centroid_latitude"]),
+                    "longitude": float(row["centroid_longitude"]),
+                }
+
+    if postcode and "postcode" in suburb_lookup.columns:
+        postcode_match = suburb_lookup.loc[suburb_lookup["postcode"].astype("string") == postcode].copy()
+        if not postcode_match.empty:
+            row = postcode_match.iloc[0]
+            return {
+                "matched": True,
+                "match_type": "postcode",
+                "label": f"{row['suburb']} {postcode}",
+                "origin_query": clean,
+                "latitude": float(row["centroid_latitude"]),
+                "longitude": float(row["centroid_longitude"]),
+            }
+
+    if listing_df is not None and not listing_df.empty and "address" in listing_df.columns:
+        address_frame = listing_df.copy()
+        address_frame["address"] = _clean_string_series(address_frame["address"])
+        address_frame["latitude"] = pd.to_numeric(address_frame.get("latitude"), errors="coerce")
+        address_frame["longitude"] = pd.to_numeric(address_frame.get("longitude"), errors="coerce")
+        address_frame = address_frame.loc[
+            address_frame["address"].notna()
+            & address_frame["latitude"].notna()
+            & address_frame["longitude"].notna()
+        ].copy()
+        if not address_frame.empty:
+            exact = address_frame.loc[address_frame["address"].astype("string").str.upper() == clean.upper()].copy()
+            if exact.empty:
+                exact = address_frame.loc[address_frame["address"].astype("string").str.upper().str.contains(clean.upper(), na=False)].copy()
+            if not exact.empty:
+                row = exact.iloc[0]
+                return {
+                    "matched": True,
+                    "match_type": "address",
+                    "label": str(row["address"]),
+                    "origin_query": clean,
+                    "latitude": float(row["latitude"]),
+                    "longitude": float(row["longitude"]),
+                }
+
+    return {"matched": False, "reason": "not_found", "origin_query": clean}
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2.0) ** 2
+    return 2.0 * radius_km * math.asin(math.sqrt(a))
+
+
+def _estimate_commute_minutes(distance_km: pd.Series | float, *, mode: str) -> pd.Series | float:
+    config = COMMUTE_MODE_CONFIG.get(mode, COMMUTE_MODE_CONFIG["drive"])
+    adjusted_distance = distance_km * float(config.get("distance_multiplier", 1.0))
+    return (adjusted_distance / max(float(config["speed_kmh"]), 0.1) * 60.0) + float(config["fixed_minutes"])
+
+
+def _haversine_series_km(
+    *,
+    origin_lat: float,
+    origin_lon: float,
+    target_lat: pd.Series,
+    target_lon: pd.Series,
+) -> pd.Series:
+    radius_km = 6371.0
+    origin_lat_rad = math.radians(origin_lat)
+    target_lat_rad = np.radians(target_lat.astype(float))
+    d_phi = np.radians(target_lat.astype(float) - float(origin_lat))
+    d_lambda = np.radians(target_lon.astype(float) - float(origin_lon))
+    a = np.sin(d_phi / 2.0) ** 2 + np.cos(origin_lat_rad) * np.cos(target_lat_rad) * np.sin(d_lambda / 2.0) ** 2
+    return 2.0 * radius_km * np.arcsin(np.sqrt(a))
+
+
+def compute_commute_suburb_frame(
+    *,
+    origin_lat: float,
+    origin_lon: float,
+    suburb_lookup: pd.DataFrame,
+    mode: str,
+) -> pd.DataFrame:
+    if suburb_lookup is None or suburb_lookup.empty:
+        return pd.DataFrame(columns=["geo_suburb_key", "suburb", "commute_distance_km", "commute_minutes"])
+
+    frame = suburb_lookup.copy()
+    latitudes = pd.to_numeric(frame.get("centroid_latitude"), errors="coerce")
+    longitudes = pd.to_numeric(frame.get("centroid_longitude"), errors="coerce")
+    frame = frame.loc[latitudes.notna() & longitudes.notna()].copy()
+    if frame.empty:
+        return pd.DataFrame(columns=["geo_suburb_key", "suburb", "commute_distance_km", "commute_minutes"])
+
+    frame["commute_distance_km"] = _haversine_series_km(
+        origin_lat=float(origin_lat),
+        origin_lon=float(origin_lon),
+        target_lat=pd.to_numeric(frame["centroid_latitude"], errors="coerce"),
+        target_lon=pd.to_numeric(frame["centroid_longitude"], errors="coerce"),
+    )
+    frame["commute_minutes"] = _estimate_commute_minutes(frame["commute_distance_km"], mode=mode)
+    return frame.sort_values(["commute_minutes", "suburb"], ascending=[True, True]).reset_index(drop=True)
+
+
+def compute_commute_listing_frame(
+    *,
+    origin_lat: float,
+    origin_lon: float,
+    listing_df: pd.DataFrame,
+    mode: str,
+) -> pd.DataFrame:
+    columns = ["listing_id", "suburb", "latitude", "longitude", "commute_distance_km", "commute_minutes"]
+    if listing_df is None or listing_df.empty:
+        return pd.DataFrame(columns=columns)
+
+    frame = listing_df.copy()
+    frame["latitude"] = pd.to_numeric(frame.get("latitude"), errors="coerce")
+    frame["longitude"] = pd.to_numeric(frame.get("longitude"), errors="coerce")
+    frame = frame.loc[frame["latitude"].notna() & frame["longitude"].notna()].copy()
+    if frame.empty:
+        return pd.DataFrame(columns=columns)
+
+    frame["commute_distance_km"] = _haversine_series_km(
+        origin_lat=float(origin_lat),
+        origin_lon=float(origin_lon),
+        target_lat=frame["latitude"],
+        target_lon=frame["longitude"],
+    )
+    frame["commute_minutes"] = _estimate_commute_minutes(frame["commute_distance_km"], mode=mode)
+    return frame.loc[:, [col for col in columns if col in frame.columns]].sort_values(
+        ["commute_minutes", "suburb", "listing_id"],
+        ascending=[True, True, True],
+    ).reset_index(drop=True)
+
+
+def _apply_external_numeric_display_filter(
+    df: pd.DataFrame,
+    *,
+    numeric_col: str,
+    min_value: float,
+    max_value: float,
+    valid_flag_col: str,
+    missing_flag_col: str,
+) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame() if df is None else df.copy()
+
+    out = df.copy()
+    numeric = pd.to_numeric(out.get(numeric_col), errors="coerce")
+    has_numeric = numeric.notna()
+    valid_numeric = has_numeric & numeric.between(float(min_value), float(max_value), inclusive="both")
+    keep_mask = (~has_numeric) | valid_numeric
+
+    out = out.loc[keep_mask].copy()
+    out[valid_flag_col] = valid_numeric.loc[out.index].astype(bool)
+    out[missing_flag_col] = (~has_numeric.loc[out.index]).astype(bool)
+    return out
+
+
+def _order_external_display_rows(
+    df: pd.DataFrame,
+    *,
+    primary_sort_col: str,
+    primary_sort_ascending: bool,
+    valid_flag_col: str,
+    recency_col: str | None = None,
+) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame() if df is None else df.copy()
+
+    out = df.copy()
+    if valid_flag_col not in out.columns:
+        out[valid_flag_col] = False
+    out["_external_valid_price_rank"] = out[valid_flag_col].fillna(False).astype(int)
+
+    sort_cols = ["_external_valid_price_rank"]
+    ascending = [False]
+
+    if primary_sort_col in out.columns:
+        sort_cols.append(primary_sort_col)
+        ascending.append(primary_sort_ascending)
+
+    if recency_col and recency_col in out.columns:
+        out["_external_recency_sort"] = pd.to_datetime(out[recency_col], errors="coerce")
+        sort_cols.append("_external_recency_sort")
+        ascending.append(False)
+
+    for col in ("suburb", "address"):
+        if col in out.columns:
+            sort_cols.append(col)
+            ascending.append(True)
+
+    out = out.sort_values(by=sort_cols, ascending=ascending, na_position="last")
+    return out.drop(columns=["_external_valid_price_rank", "_external_recency_sort"], errors="ignore")
 
 
 def _format_price_display(price_min, price_max, raw_display) -> str:
@@ -519,6 +875,32 @@ def load_domain_sale_listings() -> pd.DataFrame:
     return _prepare_domain_listing_frame(df)
 
 
+def apply_external_sale_listing_display_filter(df: pd.DataFrame) -> pd.DataFrame:
+    return _apply_external_numeric_display_filter(
+        df,
+        numeric_col="price_mid",
+        min_value=EXTERNAL_SALE_DISPLAY_MIN_PRICE,
+        max_value=EXTERNAL_SALE_DISPLAY_MAX_PRICE,
+        valid_flag_col="external_display_valid_price",
+        missing_flag_col="external_display_missing_price",
+    )
+
+
+def order_external_sale_listing_display(
+    df: pd.DataFrame,
+    *,
+    primary_sort_col: str,
+    primary_sort_ascending: bool,
+) -> pd.DataFrame:
+    return _order_external_display_rows(
+        df,
+        primary_sort_col=primary_sort_col,
+        primary_sort_ascending=primary_sort_ascending,
+        valid_flag_col="external_display_valid_price",
+        recency_col="listing_date",
+    )
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 def load_domain_rent_listings(*, standard_residential_only: bool = True) -> pd.DataFrame:
     path = _resolve_domain_rent_listing_parquet_path()
@@ -544,6 +926,33 @@ def load_domain_rent_listings(*, standard_residential_only: bool = True) -> pd.D
         df,
         classification_lookup=classification_lookup,
         standard_residential_only=standard_residential_only,
+    )
+
+
+def apply_external_rent_listing_display_filter(df: pd.DataFrame) -> pd.DataFrame:
+    return _apply_external_numeric_display_filter(
+        df,
+        numeric_col="rent_mid",
+        min_value=EXTERNAL_RENT_DISPLAY_MIN_WEEKLY,
+        max_value=EXTERNAL_RENT_DISPLAY_MAX_WEEKLY,
+        valid_flag_col="external_display_valid_rent",
+        missing_flag_col="external_display_missing_rent",
+    )
+
+
+def order_external_rent_listing_display(
+    df: pd.DataFrame,
+    *,
+    primary_sort_col: str,
+    primary_sort_ascending: bool,
+) -> pd.DataFrame:
+    recency_col = "available_date" if "available_date" in df.columns else None
+    return _order_external_display_rows(
+        df,
+        primary_sort_col=primary_sort_col,
+        primary_sort_ascending=primary_sort_ascending,
+        valid_flag_col="external_display_valid_rent",
+        recency_col=recency_col,
     )
 
 

@@ -17,7 +17,7 @@ I18N = {
         "dwelling_unit": "Unit",
         "no_data": "没有数据，请检查当前筛选条件或数据文件。",
         "market_view_title": "市场概览",
-        "market_view_note": "基于当前滚动 mart 口径展示稳定与非稳定尾段，不改动现有 rolling 定义。",
+        "market_view_note": "测试版聚焦 NSW 市场趋势与价格带变化，帮助你更快把握当前市场节奏。",
         "data_as_of": "数据截至",
         "time_range": "时间范围",
         "data_level": "数据层级",
@@ -89,7 +89,7 @@ I18N = {
         "dwelling_unit": "Unit",
         "no_data": "No data. Check the current filters or data files.",
         "market_view_title": "Market View",
-        "market_view_note": "Shows the stable and unstable tail under the current rolling mart definition without changing the existing rolling logic.",
+        "market_view_note": "Public beta view of NSW market momentum and price-band shifts, designed for quick weekly check-ins.",
         "data_as_of": "Data as of",
         "time_range": "Time range",
         "data_level": "Data level",
@@ -149,24 +149,54 @@ I18N = {
 }
 
 
+def _normalize_lang_value(lang: str | None) -> str:
+    return "en" if str(lang) == "en" else "zh"
+
+
 def ensure_lang() -> None:
-    if "lang" not in st.session_state:
-        st.session_state["lang"] = "zh"
+    current = st.session_state.get("lang")
+    legacy = st.session_state.get("language")
+    normalized = _normalize_lang_value(current if current is not None else legacy)
+    st.session_state["lang"] = normalized
+    st.session_state["language"] = normalized
 
 
 def get_lang() -> str:
     ensure_lang()
-    return st.session_state.get("lang", "zh")
+    return _normalize_lang_value(st.session_state.get("lang"))
 
 
 def set_lang(lang: str) -> None:
-    st.session_state["lang"] = "en" if str(lang) == "en" else "zh"
+    normalized = _normalize_lang_value(lang)
+    st.session_state["lang"] = normalized
+    st.session_state["language"] = normalized
 
 
 def t(key: str) -> str:
     ensure_lang()
     lang = get_lang()
-    return I18N.get(lang, I18N["zh"]).get(key, key)
+    fallback = {
+        "insufficient_history": {
+            "zh": "历史不足",
+            "en": "Insufficient history",
+        },
+        "no_prior_stable_match": {
+            "zh": "当前时间范围内无可比去年稳定点",
+            "en": "No comparable stable point in selected range",
+        },
+        "market_data_loaded_to": {
+            "zh": "市场数据已更新至",
+            "en": "Market data loaded to",
+        },
+        "market_view_stability_note": {
+            "zh": "由于成交登记存在延迟，较新的数据仍在补录中，暂未达到稳定标准",
+            "en": "Recent transactions are still being recorded and have not yet reached stability thresholds",
+        },
+    }
+    value = I18N.get(lang, I18N["zh"]).get(key)
+    if value is not None:
+        return value
+    return fallback.get(key, {}).get(lang, key)
 
 
 def tr(zh: str, en: str) -> str:

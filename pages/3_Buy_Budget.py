@@ -9,11 +9,21 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from utils.config import IS_EXTERNAL_MODE
-from utils.data import format_price, get_domain_listing_source_status, load_domain_sale_listings
-from utils.i18n import ensure_lang, tr
-from utils.map_view import resolve_budget_map_view
+from utils.data import (
+    apply_external_sale_listing_display_filter,
+    build_suburb_centroid_lookup,
+    compute_commute_listing_frame,
+    compute_commute_suburb_frame,
+    format_price,
+    get_domain_listing_source_status,
+    load_domain_sale_listings,
+    order_external_sale_listing_display,
+    resolve_commute_origin,
+)
+from utils.i18n import ensure_lang, get_lang, tr
+from utils.map_view import NSW_MAP_BOUNDS, clamp_to_nsw_map_view, resolve_budget_map_view
 from utils.perf import PagePerf, render_internal_timing_summary
-from utils.ui import inject_app_theme
+from utils.ui import inject_app_theme, render_external_page_header, sidebar_common
 
 
 SUBURB_JOIN_ALIASES = {
@@ -24,6 +34,13 @@ IGNORABLE_SUBURB_KEYS = {"NORFOLK ISLAND"}
 LOCALITY_VARIANT_KEYS = {"BALMORAL VILLAGE", "DARLING HARBOUR", "WALSH BAY", "YELLOW ROCK RIDGE"}
 BUDGET_STEP = 50_000
 MAP_HEIGHT = 640
+BUY_SORT_SPECS: dict[str, tuple[str, bool]] = {
+    "price_asc": ("price_mid", True),
+    "price_desc": ("price_mid", False),
+    "newest": ("listing_date", False),
+    "bedrooms_desc": ("bedrooms", False),
+    "suburb_asc": ("suburb", True),
+}
 
 st.markdown(
     """
@@ -91,6 +108,82 @@ st.markdown(
         color: #6b7280;
         font-size: 0.88rem;
     }
+    .budget-list-row {
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 16px;
+        padding: 0.85rem 0.95rem;
+        margin-bottom: 0.75rem;
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92));
+    }
+    .budget-list-address {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #111827;
+        line-height: 1.3;
+        margin-bottom: 0.18rem;
+    }
+    .budget-list-meta {
+        color: #6b7280;
+        font-size: 0.82rem;
+        line-height: 1.4;
+    }
+    .budget-list-price {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #0f172a;
+        text-align: right;
+        white-space: nowrap;
+    }
+    .budget-list-subprice {
+        color: #6b7280;
+        font-size: 0.78rem;
+        text-align: right;
+    }
+    .budget-table-head {
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #6b7280;
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+        margin-bottom: 0.3rem;
+    }
+    .budget-table-row {
+        padding: 0.28rem 0;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        min-height: 2.45rem;
+        display: flex;
+        align-items: center;
+    }
+    .budget-table-cell {
+        font-size: 0.88rem;
+        color: #1f2937;
+        line-height: 1.25;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .budget-table-price {
+        font-size: 0.92rem;
+        font-weight: 800;
+        color: #0f172a;
+        white-space: nowrap;
+    }
+    .budget-table-address a {
+        color: #0f172a;
+        text-decoration: none;
+        font-weight: 700;
+    }
+    .budget-table-address a:hover {
+        text-decoration: underline;
+    }
+    .budget-table-muted {
+        color: #6b7280;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
     @media (max-width: 900px) {
         div[data-testid="column"] {
             min-width: 100% !important;
@@ -140,6 +233,54 @@ def _compact_price(value: float | int | None) -> str:
     return format_price(amount)
 
 
+def _build_external_sale_budget_scale() -> list[int]:
+    values: set[int] = {0, 10_000_000}
+    values.update(range(50_000, 1_000_000, 50_000))
+    values.update(range(1_000_000, 3_000_001, 100_000))
+    values.update(range(3_000_000, 5_000_001, 250_000))
+    values.update(range(5_000_000, 10_000_001, 500_000))
+    return sorted(values)
+
+
+def _format_external_sale_budget_label(value: int | str) -> str:
+    if isinstance(value, str):
+        text = value.strip().upper()
+        if text in {"0"} or text.endswith(("K", "M")):
+            return text
+        amount = int(text.replace(",", ""))
+    else:
+        amount = int(value)
+    if amount <= 0:
+        return "0"
+    if amount < 1_000_000:
+        return f"{int(amount / 1_000)}K"
+    return f"{amount / 1_000_000:.1f}M"
+
+
+def _coerce_external_budget_range(
+    saved_range: tuple[int, int] | list[int] | None,
+    *,
+    options: list[int],
+    default_range: tuple[int, int],
+) -> tuple[int, int]:
+    if not options:
+        return default_range
+
+    if (
+        isinstance(saved_range, (list, tuple))
+        and len(saved_range) == 2
+    ):
+        raw_min, raw_max = int(saved_range[0]), int(saved_range[1])
+    else:
+        raw_min, raw_max = default_range
+
+    nearest_min = min(options, key=lambda item: (abs(item - raw_min), item))
+    nearest_max = min(options, key=lambda item: (abs(item - raw_max), item))
+    if nearest_min > nearest_max:
+        return default_range
+    return nearest_min, nearest_max
+
+
 def _availability_level(listing_count: int) -> tuple[str, str]:
     if listing_count >= 12:
         return tr("高可选", "High availability"), "green"
@@ -170,8 +311,13 @@ def _mode_or_na(series: pd.Series) -> str:
 
 
 def _normalise_bounds(df: pd.DataFrame) -> tuple[int, int]:
-    price_min = pd.to_numeric(df["price_filter_min"], errors="coerce")
-    price_max = pd.to_numeric(df["price_filter_max"], errors="coerce")
+    source_df = apply_external_sale_listing_display_filter(df) if IS_EXTERNAL_MODE else df
+    if source_df.empty:
+        source_df = df
+    price_min = pd.to_numeric(source_df["price_filter_min"], errors="coerce")
+    price_max = pd.to_numeric(source_df["price_filter_max"], errors="coerce")
+    if IS_EXTERNAL_MODE:
+        return 0, 10_000_000
     if price_min.notna().any() and price_max.notna().any():
         lower = max(0, int(math.floor(price_min.min() / 50_000.0) * 50_000))
         upper = int(math.ceil(price_max.max() / 50_000.0) * 50_000)
@@ -220,6 +366,12 @@ def _init_state() -> None:
         st.session_state["budget_map_view"] = {"center": None, "zoom": None}
     if "budget_focus_notice" not in st.session_state:
         st.session_state["budget_focus_notice"] = None
+    if "budget_commute_notice" not in st.session_state:
+        st.session_state["budget_commute_notice"] = None
+    if "budget_group_notice" not in st.session_state:
+        st.session_state["budget_group_notice"] = None
+    if "buy_external_search_triggered" not in st.session_state:
+        st.session_state["buy_external_search_triggered"] = False
 
 
 def _consume_focus_notice(key: str) -> str | None:
@@ -365,7 +517,7 @@ def _clear_suburb_focus() -> None:
 
 def _reset_ranking_filters() -> None:
     st.session_state["budget_ranking_search"] = ""
-    st.session_state["budget_ranking_min_listings"] = 5
+    st.session_state["budget_ranking_min_listings"] = 1 if IS_EXTERNAL_MODE else 5
 
 
 def _set_map_view(center: dict[str, float] | None, zoom: float | None) -> None:
@@ -380,6 +532,9 @@ def _default_budget_filters(min_budget: int, max_budget: int) -> dict[str, objec
         "selected_postcodes": [],
         "selected_property_groups": [],
         "selected_property_subtypes": [],
+        "commute_query": "",
+        "commute_mode": "drive",
+        "commute_minutes": 30,
         "min_bedrooms": 0,
         "min_bathrooms": 0,
         "min_parking": 0,
@@ -397,9 +552,43 @@ def _merge_filter_defaults(saved: dict[str, object] | None, min_budget: int, max
         merged.update(saved)
     merged["budget_min"] = _normalise_budget_value(int(merged["budget_min"]), min_budget, max_budget)
     merged["budget_max"] = _normalise_budget_value(int(merged["budget_max"]), min_budget, max_budget)
+    merged["selected_sort"] = _coerce_buy_sort_key(merged.get("selected_sort"))
     if merged["budget_min"] > merged["budget_max"]:
         merged["budget_min"], merged["budget_max"] = min_budget, max_budget
     return merged
+
+
+def _buy_sort_labels() -> dict[str, str]:
+    return {
+        "price_asc": tr("价格从低到高", "Price low to high"),
+        "price_desc": tr("价格从高到低", "Price high to low"),
+        "newest": tr("最新房源", "Newest listing"),
+        "bedrooms_desc": tr("卧室数", "Bedrooms"),
+        "suburb_asc": tr("Suburb", "Suburb"),
+    }
+
+
+def _coerce_buy_sort_key(value: object) -> str:
+    current = str(value or "").strip()
+    if current in BUY_SORT_SPECS:
+        return current
+    reverse = {label: key for key, label in _buy_sort_labels().items()}
+    legacy_map = {
+        "Price low to high": "price_asc",
+        "价格从低到高": "price_asc",
+        "Price high to low": "price_desc",
+        "价格从高到低": "price_desc",
+        "Newest listing": "newest",
+        "最新房源": "newest",
+        "Bedrooms": "bedrooms_desc",
+        "卧室数": "bedrooms_desc",
+        "Suburb": "suburb_asc",
+    }
+    return reverse.get(current) or legacy_map.get(current, "price_asc")
+
+
+def _buy_sort_label(sort_key: object) -> str:
+    return _buy_sort_labels().get(_coerce_buy_sort_key(sort_key), _buy_sort_labels()["price_asc"])
 
 
 def _set_budget_draft_from_filters(filters: dict[str, object], *, overwrite: bool = False) -> None:
@@ -419,6 +608,98 @@ def _init_budget_filter_state(min_budget: int, max_budget: int) -> None:
     applied = _merge_filter_defaults(st.session_state.get("budget_applied_filters"), min_budget, max_budget)
     st.session_state["budget_applied_filters"] = applied
     _set_budget_draft_from_filters(_merge_filter_defaults(st.session_state.get("budget_applied_filters"), min_budget, max_budget))
+
+
+def _sync_external_buy_widget_state_from_applied(applied: dict[str, object], external_budget_options: list[int]) -> None:
+    st.session_state["budget_selected_suburbs"] = list(applied.get("selected_suburbs", []))
+    st.session_state["budget_selected_postcodes"] = list(applied.get("selected_postcodes", []))
+    st.session_state["budget_min_bedrooms"] = int(applied.get("min_bedrooms", 0))
+    st.session_state["budget_min_bathrooms"] = int(applied.get("min_bathrooms", 0))
+    st.session_state["budget_min_parking"] = int(applied.get("min_parking", 0))
+    st.session_state["budget_exact_bedrooms"] = bool(applied.get("exact_bedrooms", False))
+    st.session_state["budget_exact_bathrooms"] = bool(applied.get("exact_bathrooms", False))
+    st.session_state["budget_exact_parking"] = bool(applied.get("exact_parking", False))
+    st.session_state["budget_show_subtypes"] = bool(applied.get("show_subtypes", False))
+    st.session_state["budget_selected_sort"] = _coerce_buy_sort_key(applied.get("selected_sort"))
+    st.session_state["budget_commute_query"] = str(applied.get("commute_query", ""))
+    st.session_state["budget_commute_mode"] = str(applied.get("commute_mode", "drive"))
+    st.session_state["budget_commute_minutes"] = int(applied.get("commute_minutes", 30))
+    st.session_state["budget_selected_property_groups"] = list(applied.get("selected_property_groups", []))
+    st.session_state["budget_selected_sort"] = _coerce_buy_sort_key(st.session_state.get("budget_selected_sort"))
+    st.session_state["budget_external_applied_range"] = _coerce_external_budget_range(
+        (int(applied.get("budget_min", 0)), int(applied.get("budget_max", 10_000_000))),
+        options=external_budget_options,
+        default_range=(0, 10_000_000),
+    )
+
+
+def _initialise_external_buy_widget_state_from_applied(applied: dict[str, object], external_budget_options: list[int]) -> None:
+    widget_defaults = {
+        "budget_selected_suburbs": list(applied.get("selected_suburbs", [])),
+        "budget_selected_postcodes": list(applied.get("selected_postcodes", [])),
+        "budget_min_bedrooms": int(applied.get("min_bedrooms", 0)),
+        "budget_min_bathrooms": int(applied.get("min_bathrooms", 0)),
+        "budget_min_parking": int(applied.get("min_parking", 0)),
+        "budget_exact_bedrooms": bool(applied.get("exact_bedrooms", False)),
+        "budget_exact_bathrooms": bool(applied.get("exact_bathrooms", False)),
+        "budget_exact_parking": bool(applied.get("exact_parking", False)),
+        "budget_show_subtypes": bool(applied.get("show_subtypes", False)),
+        "budget_selected_sort": str(applied.get("selected_sort", tr("价格从低到高", "Price low to high"))),
+        "budget_commute_query": str(applied.get("commute_query", "")),
+        "budget_commute_mode": str(applied.get("commute_mode", "drive")),
+        "budget_commute_minutes": int(applied.get("commute_minutes", 30)),
+        "budget_selected_property_groups": list(applied.get("selected_property_groups", [])),
+    }
+    for key, value in widget_defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+    st.session_state["budget_selected_sort"] = _coerce_buy_sort_key(st.session_state.get("budget_selected_sort"))
+    st.session_state["budget_external_applied_range"] = _coerce_external_budget_range(
+        (int(applied.get("budget_min", 0)), int(applied.get("budget_max", 10_000_000))),
+        options=external_budget_options,
+        default_range=(0, 10_000_000),
+    )
+
+
+def _reset_external_buy_filters(min_budget: int, max_budget: int, external_budget_options: list[int]) -> None:
+    defaults = _merge_filter_defaults({}, min_budget, max_budget)
+    st.session_state["budget_applied_filters"] = defaults
+    st.session_state["budget_pending_reset"] = True
+    st.session_state["buy_external_search_triggered"] = False
+
+
+def _apply_pending_external_buy_reset(external_budget_options: list[int]) -> None:
+    if not st.session_state.pop("budget_pending_reset", False):
+        return
+    defaults = _merge_filter_defaults(st.session_state.get("budget_applied_filters"), 0, 10_000_000)
+    _sync_external_buy_widget_state_from_applied(defaults, external_budget_options)
+    for key in list(st.session_state.keys()):
+        if key.startswith("budget_subtypes_"):
+            del st.session_state[key]
+    st.session_state["budget_selected_group_labels"] = []
+    st.session_state["budget_commute_notice"] = None
+    st.session_state["budget_group_notice"] = None
+    st.session_state["budget_focus_notice"] = None
+    st.session_state["budget_selected_suburb"] = "__ALL__"
+
+
+def _format_applied_threshold(label: str, value: int, *, exact: bool) -> str:
+    suffix = f"{value}" if exact else f"{value}+"
+    return f"{label}: {suffix}"
+
+
+def _format_applied_commute_summary(filters: dict[str, object]) -> str | None:
+    commute_label = str(filters.get("commute_label", "") or "").strip()
+    if commute_label:
+        return commute_label
+
+    commute_query = str(filters.get("commute_query", "") or "").strip()
+    if not commute_query:
+        return None
+
+    commute_mode = str(filters.get("commute_mode", "drive") or "drive")
+    commute_minutes = int(filters.get("commute_minutes", 30) or 30)
+    return _format_commute_chip(mode=commute_mode, max_minutes=commute_minutes, label=commute_query)
 
 
 def _valid_selected(values: list[str] | None, valid_options: list[str]) -> list[str]:
@@ -703,7 +984,7 @@ def _prepare_choropleth_payload(summary_records: tuple[tuple, ...], polygon_reco
     }
 
 
-def _render_filter_chips(selected_property_groups, selected_property_subtypes, selected_suburbs, selected_postcodes, min_bedrooms, min_bathrooms, min_parking) -> None:
+def _render_filter_chips(selected_property_groups, selected_property_subtypes, selected_suburbs, selected_postcodes, min_bedrooms, min_bathrooms, min_parking, commute_label: str | None = None) -> None:
     chips = []
     if selected_property_groups:
         chips.append(f"{tr('大类', 'Group')}: {len(selected_property_groups)}")
@@ -722,6 +1003,8 @@ def _render_filter_chips(selected_property_groups, selected_property_subtypes, s
     if min_parking:
         parking_mode = tr("精确", "Exact") if st.session_state.get("budget_exact_parking", False) else "+"
         chips.append(f"{tr('车位', 'Parking')} {min_parking}{'' if parking_mode != '+' else '+'}" if parking_mode == "+" else f"{tr('车位', 'Parking')} = {min_parking}")
+    if commute_label:
+        chips.append(commute_label)
     if not chips:
         chips.append(tr("当前为宽筛选模式", "Currently using a broad search"))
     st.markdown("".join(f"<span class='budget-chip'>{item}</span>" for item in chips), unsafe_allow_html=True)
@@ -744,6 +1027,8 @@ def _apply_budget_filters(
     exact_bedrooms: bool = False,
     exact_bathrooms: bool = False,
     exact_parking: bool = False,
+    allowed_listing_ids: list[str] | set[str] | None = None,
+    allowed_suburbs: list[str] | None = None,
     include_budget: bool = True,
     skip_filters: set[str] | None = None,
 ) -> tuple[pd.DataFrame, list[tuple[str, int]]]:
@@ -753,12 +1038,12 @@ def _apply_budget_filters(
 
     if include_budget:
         full_budget_selected = _full_budget_selected(budget_min, budget_max, min_budget, max_budget)
-        budget_overlap = (
+        budget_contained = (
             filtered["has_price"]
-            & (filtered["price_filter_min"] <= budget_max)
-            & (filtered["price_filter_max"] >= budget_min)
+            & (filtered["price_filter_min"] >= budget_min)
+            & (filtered["price_filter_max"] <= budget_max)
         )
-        filtered = filtered.loc[budget_overlap | (full_budget_selected & ~filtered["has_price"])].copy()
+        filtered = filtered.loc[budget_contained | (full_budget_selected & ~filtered["has_price"])].copy()
     frames.append(("after_budget", int(len(filtered))))
 
     if selected_suburbs and "suburb" not in skip_filters:
@@ -768,6 +1053,13 @@ def _apply_budget_filters(
     if selected_postcodes and "postcode" not in skip_filters:
         filtered = filtered.loc[filtered["postcode"].isin(selected_postcodes)].copy()
     frames.append(("after_postcode", int(len(filtered))))
+
+    if allowed_listing_ids is not None and "commute" not in skip_filters:
+        allowed_listing_ids = {str(value) for value in allowed_listing_ids}
+        filtered = filtered.loc[filtered["listing_id"].astype(str).isin(allowed_listing_ids)].copy()
+    elif allowed_suburbs is not None and "commute" not in skip_filters:
+        filtered = filtered.loc[filtered["suburb"].isin(allowed_suburbs)].copy()
+    frames.append(("after_commute", int(len(filtered))))
 
     if min_bedrooms and "bedrooms" not in skip_filters:
         comparator = filtered["bedrooms"].fillna(-1) == min_bedrooms if exact_bedrooms else filtered["bedrooms"].fillna(-1) >= min_bedrooms
@@ -946,29 +1238,38 @@ def _render_suburb_ranking(summary: pd.DataFrame) -> None:
 
     focused_suburb = _selected_suburb()
     total_available = len(summary)
-    controls = st.columns([1.55, 0.9, 0.95, 0.95])
+    controls = st.columns([1.9, 1.0, 1.0] if IS_EXTERNAL_MODE else [1.55, 0.9, 0.95, 0.95])
     with controls[0]:
         search_value = st.text_input(
             tr("Search suburb", "Search suburb"),
             key="budget_ranking_search",
             placeholder=tr("Type part of a suburb name", "Type part of a suburb name"),
         ).strip()
-    with controls[1]:
-        min_listings = int(
-            st.number_input(
-                tr("Min listings", "Min listings"),
-                min_value=1,
-                max_value=500,
-                value=int(st.session_state.get("budget_ranking_min_listings", 5)),
-                step=1,
-                key="budget_ranking_min_listings",
+    if not IS_EXTERNAL_MODE:
+        with controls[1]:
+            min_listings = int(
+                st.number_input(
+                    tr("Min listings", "Min listings"),
+                    min_value=1,
+                    max_value=500,
+                    value=int(st.session_state.get("budget_ranking_min_listings", 5)),
+                    step=1,
+                    key="budget_ranking_min_listings",
+                )
             )
+        reset_col = controls[2]
+        focus_col = controls[3]
+    else:
+        min_listings = int(
+            st.session_state.get("budget_ranking_min_listings", 1)
         )
-    with controls[2]:
+        reset_col = controls[1]
+        focus_col = controls[2]
+    with reset_col:
         if st.button(tr("Reset ranking filters", "Reset ranking filters"), use_container_width=True):
             _reset_ranking_filters()
             st.rerun()
-    with controls[3]:
+    with focus_col:
         if st.button(tr("Reset suburb focus", "Reset suburb focus"), use_container_width=True, disabled=focused_suburb == "__ALL__"):
             _clear_suburb_focus()
             st.rerun()
@@ -978,7 +1279,7 @@ def _render_suburb_ranking(summary: pd.DataFrame) -> None:
         ranking = ranking.loc[ranking["suburb"].astype(str).str.contains(search_value, case=False, na=False)].copy()
     if focused_suburb != "__ALL__":
         ranking = ranking.loc[ranking["suburb"] == focused_suburb].copy()
-    if focused_suburb == "__ALL__":
+    if focused_suburb == "__ALL__" and not IS_EXTERNAL_MODE:
         ranking = ranking.loc[ranking["priced_listings_count"] >= min_listings].copy()
     ranking = ranking.sort_values(
         ["coverage_ratio", "within_budget_count", "total_priced_listings", "median_asking_price", "suburb"],
@@ -986,21 +1287,31 @@ def _render_suburb_ranking(summary: pd.DataFrame) -> None:
         na_position="last",
     ).reset_index(drop=True)
 
-    st.caption(tr(f"显示 {min(len(ranking), 50):,} / {total_available:,} 个 suburb", f"Showing {min(len(ranking), 50):,} of {total_available:,} suburbs"))
-    st.caption(tr(f"最小挂牌数阈值后: {min_listings}", f"After ranking min listings threshold: {min_listings}"))
+    shown_count = len(ranking) if IS_EXTERNAL_MODE else min(len(ranking), 50)
+    st.caption(tr(f"显示 {shown_count:,} / {total_available:,} 个 suburb", f"Showing {shown_count:,} of {total_available:,} suburbs"))
+    if not IS_EXTERNAL_MODE:
+        st.caption(tr(f"最小挂牌数阈值后: {min_listings}", f"After ranking min listings threshold: {min_listings}"))
     st.caption(tr(f"当前聚焦 suburb: {focused_suburb if focused_suburb != '__ALL__' else '无'}", f"Focused suburb: {focused_suburb if focused_suburb != '__ALL__' else 'None'}"))
 
     if ranking.empty:
         st.warning(tr(f"排名筛选后 0 / {total_available:,} 个 suburb 可显示。", f"Showing 0 of {total_available:,} suburbs after ranking filters."))
         return
 
-    view = ranking.head(50).copy()
+    view = ranking.copy() if IS_EXTERNAL_MODE else ranking.head(50).copy()
     view[tr("聚焦", "Focus")] = view["suburb"].eq(focused_suburb).map({True: tr("已聚焦", "Focused"), False: ""})
     view[tr("覆盖率", "Coverage")] = (view["coverage_ratio"] * 100).round().astype(int).astype(str) + "%"
     view[tr("预算内", "Within Budget")] = view["within_budget_count"].astype(int)
     view[tr("有报价", "Priced Listings")] = view["priced_listings_count"].astype(int)
     view[tr("总挂牌", "Total Listings")] = view["total_listings_count"].astype(int)
     view[tr("中位标价", "Median Price")] = view["median_asking_price"].map(_compact_price)
+
+    if IS_EXTERNAL_MODE:
+        _render_external_suburb_ranking_table(
+            view.assign(**{"suburb": view["suburb"]}),
+            focused_suburb=focused_suburb,
+            key_prefix="budget_ranking",
+        )
+        return
 
     selection = st.dataframe(
         view[[tr("聚焦", "Focus"), "suburb", tr("覆盖率", "Coverage"), tr("预算内", "Within Budget"), tr("有报价", "Priced Listings"), tr("总挂牌", "Total Listings"), tr("中位标价", "Median Price")]].rename(
@@ -1047,7 +1358,7 @@ def _resolve_map_selection(event_state) -> str | None:
 
 
 def _resolve_map_view(map_summary: pd.DataFrame, map_df: pd.DataFrame, selected_suburb: str) -> tuple[dict[str, float] | None, float]:
-    boundaries = _load_suburb_boundaries()
+    boundaries = _load_suburb_boundaries() if not IS_EXTERNAL_MODE else {"geojson": None}
     center, zoom = resolve_budget_map_view(
         selected_suburb=selected_suburb,
         suburb_key=_normalise_suburb_key(selected_suburb) if selected_suburb != "__ALL__" else None,
@@ -1055,6 +1366,8 @@ def _resolve_map_view(map_summary: pd.DataFrame, map_df: pd.DataFrame, selected_
         map_df=map_df,
         boundary_geojson=boundaries.get("geojson"),
     )
+    if IS_EXTERNAL_MODE:
+        center, zoom = clamp_to_nsw_map_view(center, zoom)
     st.session_state["budget_map_focus_token"] = selected_suburb
     _set_map_view(center, zoom)
     return center, zoom
@@ -1062,7 +1375,13 @@ def _resolve_map_view(map_summary: pd.DataFrame, map_df: pd.DataFrame, selected_
 
 def _build_map(filtered: pd.DataFrame, suburb_summary: pd.DataFrame, selected_suburb: str) -> str:
     map_df = filtered.loc[filtered["has_coordinates"]].copy()
-    boundaries = _load_suburb_boundaries()
+    boundaries = _load_suburb_boundaries() if not IS_EXTERNAL_MODE else {
+        "available": False,
+        "path": "",
+        "geojson": None,
+        "centroids": pd.DataFrame(),
+        "polygons": pd.DataFrame(),
+    }
     map_summary = suburb_summary.copy()
 
     if map_df.empty and map_summary.empty:
@@ -1082,6 +1401,75 @@ def _build_map(filtered: pd.DataFrame, suburb_summary: pd.DataFrame, selected_su
     map_summary = map_summary.loc[map_summary["map_latitude"].notna() & map_summary["map_longitude"].notna()].copy()
     focus_points = map_df.loc[map_df["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else pd.DataFrame()
     center, zoom = _resolve_map_view(map_summary, map_df, selected_suburb)
+
+    if IS_EXTERNAL_MODE:
+        fig = go.Figure()
+        if not map_summary.empty:
+            size_scale = 9 + 14 * (map_summary["listing_count"] / max(float(map_summary["listing_count"].max()), 1.0))
+            fig.add_trace(
+                go.Scattermapbox(
+                    lat=map_summary["map_latitude"],
+                    lon=map_summary["map_longitude"],
+                    mode="markers",
+                    name=tr("Suburb 选择点", "Suburb selector"),
+                    marker=dict(
+                        size=size_scale.tolist(),
+                        color=map_summary["suburb"].eq(selected_suburb).map({True: "#0f4c81", False: "#1d6f8c"}).tolist(),
+                        opacity=0.76,
+                    ),
+                    customdata=list(zip(map_summary["suburb"], ["suburb"] * len(map_summary), map_summary["listing_count"])),
+                    hovertemplate=(
+                        "<b>%{customdata[0]}</b><br>"
+                        + tr("匹配房源", "Matching listings") + ": %{customdata[2]:,.0f}<br>"
+                        + tr("点击以聚焦 suburb", "Click to focus suburb")
+                        + "<extra></extra>"
+                    ),
+                )
+            )
+        sampled = False
+        if selected_suburb != "__ALL__" and not focus_points.empty:
+            focus_points = focus_points.sort_values(by=["price_mid", "listing_date"], ascending=[True, False], na_position="last")
+            if len(focus_points) > 180:
+                focus_points = focus_points.head(180)
+                sampled = True
+            fig.add_trace(
+                go.Scattermapbox(
+                    lat=focus_points["latitude"],
+                    lon=focus_points["longitude"],
+                    mode="markers",
+                    name=tr("房源点位", "Listings"),
+                    marker=dict(size=8, color="#0d5ea6", opacity=0.86),
+                    customdata=list(zip(focus_points["suburb"], ["listing"] * len(focus_points), focus_points["price_display"])),
+                    text=focus_points["address"].fillna(""),
+                    hovertemplate=(
+                        "<b>%{text}</b><br>"
+                        + tr("Suburb", "Suburb") + ": %{customdata[0]}<br>"
+                        + tr("价格", "Price") + ": %{customdata[2]}<extra></extra>"
+                    ),
+                )
+            )
+        fig.update_layout(
+            height=MAP_HEIGHT,
+            margin={"l": 0, "r": 0, "t": 0, "b": 0},
+            mapbox=dict(style="carto-positron", center=center, zoom=zoom),
+            legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01),
+            uirevision=f"budget-map-{selected_suburb}",
+        )
+        event_state = st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config={"displayModeBar": False, "responsive": True, "scrollZoom": True},
+            key="budget_map_chart",
+            on_select="rerun",
+            selection_mode="points",
+        )
+        picked_suburb = _resolve_map_selection(event_state)
+        if picked_suburb and picked_suburb != selected_suburb:
+            _set_selected_suburb(picked_suburb)
+            st.rerun()
+        if sampled:
+            st.caption(tr("当前地图中的房源点位仅展示前 180 条，以保持 External 页面响应速度。", "Listing markers are capped to the first 180 results in External mode to keep the page responsive."))
+        return selected_suburb
 
     fig = go.Figure()
     polygon_count = 0
@@ -1264,7 +1652,12 @@ def _build_map(filtered: pd.DataFrame, suburb_summary: pd.DataFrame, selected_su
     fig.update_layout(
         height=MAP_HEIGHT,
         margin={"l": 0, "r": 0, "t": 0, "b": 0},
-        mapbox=dict(style="carto-positron", center=center, zoom=zoom),
+        mapbox=dict(
+            style="carto-positron",
+            center=center,
+            zoom=zoom,
+            bounds=NSW_MAP_BOUNDS if IS_EXTERNAL_MODE else None,
+        ),
         legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01),
         uirevision=f"budget-map-{selected_suburb}",
     )
@@ -1272,7 +1665,7 @@ def _build_map(filtered: pd.DataFrame, suburb_summary: pd.DataFrame, selected_su
     event_state = st.plotly_chart(
         fig,
         use_container_width=True,
-        config={"displayModeBar": True, "responsive": True, "scrollZoom": True},
+        config={"displayModeBar": not IS_EXTERNAL_MODE, "responsive": True, "scrollZoom": True},
         key="budget_map_chart",
         on_select="rerun",
         selection_mode="points",
@@ -1346,6 +1739,133 @@ def _listing_card(row: pd.Series, *, key_prefix: str) -> None:
                 st.image(row["main_image"], use_container_width=True)
 
 
+def _external_listing_price_label(row: pd.Series) -> str:
+    if bool(row.get("has_price")) and pd.notna(row.get("price_mid")):
+        return _compact_price(row.get("price_mid"))
+    display = str(row.get("price_display") or "").strip()
+    return display if display else tr("Price on request", "Price on request")
+
+
+def _compact_count_cell(value: object) -> str:
+    text = _count_label(value)
+    return "—" if text == "N/A" else text
+
+
+def _external_sale_table_headers() -> list[str]:
+    return [
+        tr("价格", "Price"),
+        tr("地址", "Address"),
+        tr("区域 / 邮编", "Suburb / Postcode"),
+        tr("类型", "Type"),
+        tr("卧室", "Beds"),
+        tr("卫浴", "Baths"),
+        tr("车位", "Parking"),
+        tr("土地", "Land"),
+        tr("中介", "Agency"),
+        tr("操作", "Action"),
+    ]
+
+
+def _render_external_sale_table(listings: pd.DataFrame, *, key_prefix: str) -> None:
+    widths = [1.0, 2.8, 1.5, 1.15, 0.55, 0.55, 0.65, 0.85, 1.2, 0.95]
+    header_cols = st.columns(widths, gap="small")
+    for col, label in zip(header_cols, _external_sale_table_headers()):
+        col.markdown(f"<div class='budget-table-head'>{label}</div>", unsafe_allow_html=True)
+
+    for _, row in listings.iterrows():
+        cols = st.columns(widths, gap="small")
+        price_text = _external_listing_price_label(row)
+        address_text = row["address"] if pd.notna(row.get("address")) else "N/A"
+        address_html = address_text
+        suburb_postcode = f"{row['suburb'] if pd.notna(row.get('suburb')) else '—'} / {row['postcode'] if pd.notna(row.get('postcode')) else '—'}"
+        property_type = f"{row['property_group_label']} / {_title_case_subtype(row['property_subtype'])}"
+        land_label = _land_size_label(row["land_size"])
+        agency_label = row["agency_name"] if pd.notna(row.get("agency_name")) else tr("Contact agent", "Contact agent")
+
+        cols[0].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-price'>{price_text}</div></div>", unsafe_allow_html=True)
+        cols[1].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-address'>{address_html}</div></div>", unsafe_allow_html=True)
+        cols[2].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-muted'>{suburb_postcode}</div></div>", unsafe_allow_html=True)
+        cols[3].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{property_type}</div></div>", unsafe_allow_html=True)
+        cols[4].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{_compact_count_cell(row['bedrooms'])}</div></div>", unsafe_allow_html=True)
+        cols[5].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{_compact_count_cell(row['bathrooms'])}</div></div>", unsafe_allow_html=True)
+        cols[6].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{_compact_count_cell(row['parking'])}</div></div>", unsafe_allow_html=True)
+        cols[7].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-muted'>{'—' if land_label == 'N/A' else land_label}</div></div>", unsafe_allow_html=True)
+        cols[8].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-muted'>{agency_label}</div></div>", unsafe_allow_html=True)
+        shortlisted = str(row["listing_id"]) in _get_shortlist_ids()
+        action_label = tr("已选", "Saved") if shortlisted else tr("收藏", "Shortlist")
+        if cols[9].button(action_label, key=f"{key_prefix}_toggle_{row['listing_id']}", use_container_width=True):
+            _toggle_shortlist(str(row["listing_id"]), row)
+            st.rerun()
+
+
+def _render_external_suburb_ranking_table(view: pd.DataFrame, *, focused_suburb: str, key_prefix: str) -> None:
+    widths = [0.9, 1.6, 0.9, 1.0, 1.0, 1.0, 1.0]
+    headers = [
+        tr("操作", "Action"),
+        tr("Suburb", "Suburb"),
+        tr("覆盖率", "Coverage"),
+        tr("预算内", "Within Budget"),
+        tr("有报价", "Priced Listings"),
+        tr("总挂牌", "Total Listings"),
+        tr("中位标价", "Median Price"),
+    ]
+    header_cols = st.columns(widths, gap="small")
+    for col, label in zip(header_cols, headers):
+        col.markdown(f"<div class='budget-table-head'>{label}</div>", unsafe_allow_html=True)
+
+    for _, row in view.iterrows():
+        cols = st.columns(widths, gap="small")
+        is_focused = str(row["suburb"]) == focused_suburb
+        action_label = tr("已聚焦", "Focused") if is_focused else tr("聚焦", "Focus")
+        if cols[0].button(action_label, key=f"{key_prefix}_focus_{row['suburb']}", use_container_width=True, disabled=is_focused):
+            _set_selected_suburb(str(row["suburb"]))
+            st.rerun()
+        cols[1].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{row['suburb']}</div></div>", unsafe_allow_html=True)
+        cols[2].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{row[tr('覆盖率', 'Coverage')]}</div></div>", unsafe_allow_html=True)
+        cols[3].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{int(row[tr('预算内', 'Within Budget')]):,}</div></div>", unsafe_allow_html=True)
+        cols[4].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{int(row[tr('有报价', 'Priced Listings')]):,}</div></div>", unsafe_allow_html=True)
+        cols[5].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{int(row[tr('总挂牌', 'Total Listings')]):,}</div></div>", unsafe_allow_html=True)
+        cols[6].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-price'>{row[tr('中位标价', 'Median Price')]}</div></div>", unsafe_allow_html=True)
+
+
+def _render_external_listing_row(row: pd.Series, *, key_prefix: str) -> None:
+    with st.container():
+        info_col, price_col, action_col = st.columns([4.6, 1.35, 1.55], gap="small")
+        with info_col:
+            st.markdown(
+                f"""
+                <div class="budget-list-row">
+                  <div class="budget-list-address">{row['address'] if pd.notna(row.get('address')) else 'N/A'}</div>
+                  <div class="budget-list-meta">
+                    {row['suburb'] if pd.notna(row.get('suburb')) else 'N/A'} / {row['postcode'] if pd.notna(row.get('postcode')) else 'N/A'}<br>
+                    {row['property_group_label']} / {_title_case_subtype(row['property_subtype'])} | {tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)} | {tr('Land size', 'Land size')}: {_land_size_label(row['land_size'])}
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with price_col:
+            st.markdown(f"<div class='budget-list-price'>{_external_listing_price_label(row)}</div>", unsafe_allow_html=True)
+            agency_label = row["agency_name"] if pd.notna(row.get("agency_name")) else tr("Contact agent", "Contact agent")
+            st.markdown(f"<div class='budget-list-subprice'>{agency_label}</div>", unsafe_allow_html=True)
+        with action_col:
+            shortlisted = str(row["listing_id"]) in _get_shortlist_ids()
+            label = tr("ç§»å‡º shortlist", "Remove") if shortlisted else tr("åŠ å…¥ shortlist", "Shortlist")
+            if st.button(label, key=f"{key_prefix}_toggle_{row['listing_id']}", use_container_width=True):
+                _toggle_shortlist(str(row["listing_id"]), row)
+                st.rerun()
+            if False and pd.notna(row.get("url")):
+                st.link_button(tr("æ‰“å¼€æˆ¿æº", "Open listing"), row["url"], use_container_width=True)
+
+
+def _prepare_external_display_listings(listings: pd.DataFrame, *, sort_column: str, sort_ascending: bool) -> pd.DataFrame:
+    return order_external_sale_listing_display(
+        listings,
+        primary_sort_col=sort_column,
+        primary_sort_ascending=sort_ascending,
+    )
+
+
 def _render_listing_results(listings: pd.DataFrame, selected_suburb: str) -> None:
     if listings.empty:
         st.info(tr("当前 suburb / 筛选条件下没有房源。", "No listings match the current suburb or filters."))
@@ -1356,10 +1876,14 @@ def _render_listing_results(listings: pd.DataFrame, selected_suburb: str) -> Non
         + (selected_suburb if selected_suburb != "__ALL__" else tr("全部匹配 suburb", "All matching suburbs"))
         + f" • {len(listings):,} {tr('套房源', 'listings')}"
     )
-    for _, row in listings.head(14).iterrows():
-        _listing_card(row, key_prefix="browse")
-    if len(listings) > 14:
-        st.caption(tr("当前先展示前 14 条更适合浏览的结果。", "Showing the first 14 results for easier browsing."))
+    browse_limit = 24 if IS_EXTERNAL_MODE else 14
+    if IS_EXTERNAL_MODE:
+        _render_external_sale_table(listings.head(browse_limit), key_prefix="browse")
+    else:
+        for _, row in listings.head(browse_limit).iterrows():
+            _listing_card(row, key_prefix="browse")
+    if len(listings) > browse_limit:
+        st.caption(tr(f"当前先展示前 {browse_limit} 条更适合浏览的结果。", f"Showing the first {browse_limit} results for easier browsing."))
 
 
 def _render_shortlist_summary(shortlist_df: pd.DataFrame) -> None:
@@ -1386,8 +1910,11 @@ def _render_shortlist_panel(shortlist_df: pd.DataFrame) -> None:
     if shortlist_df.empty:
         st.info(tr("还没有加入 shortlist 的房源。", "No listings have been shortlisted yet."))
         return
-    for _, row in shortlist_df.iterrows():
-        _listing_card(row, key_prefix="shortlist")
+    if IS_EXTERNAL_MODE:
+        _render_external_sale_table(shortlist_df, key_prefix="shortlist")
+    else:
+        for _, row in shortlist_df.iterrows():
+            _listing_card(row, key_prefix="shortlist")
 
 
 def _render_comparison_table(shortlist_df: pd.DataFrame) -> None:
@@ -1400,6 +1927,34 @@ def _render_comparison_table(shortlist_df: pd.DataFrame) -> None:
     comparison["parking"] = comparison["parking"].map(_count_label)
     comparison["land_size"] = comparison["land_size"].map(_land_size_label)
     comparison["property_type_label"] = comparison["property_group_label"] + " / " + comparison["property_subtype"].map(_title_case_subtype)
+    if IS_EXTERNAL_MODE:
+        widths = [2.2, 1.0, 1.4, 0.7, 0.7, 0.8, 0.9, 1.1, 1.1]
+        headers = [
+            tr("åœ°å€", "Address"),
+            tr("æ ‡ä»·", "Price"),
+            tr("ç±»åž‹", "Type"),
+            tr("å§å®¤", "Bedrooms"),
+            tr("å«ç”Ÿé—´", "Bathrooms"),
+            tr("è½¦ä½", "Parking"),
+            tr("åœŸåœ°é¢ç§¯", "Land size"),
+            tr("Suburb", "Suburb"),
+            tr("ä¸­ä»‹", "Agency"),
+        ]
+        header_cols = st.columns(widths, gap="small")
+        for col, label in zip(header_cols, headers):
+            col.markdown(f"<div class='budget-table-head'>{label}</div>", unsafe_allow_html=True)
+        for _, row in comparison.iterrows():
+            cols = st.columns(widths, gap="small")
+            cols[0].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{row['address'] if pd.notna(row.get('address')) else 'N/A'}</div></div>", unsafe_allow_html=True)
+            cols[1].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-price'>{row['price_display']}</div></div>", unsafe_allow_html=True)
+            cols[2].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{row['property_type_label']}</div></div>", unsafe_allow_html=True)
+            cols[3].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{row['bedrooms']}</div></div>", unsafe_allow_html=True)
+            cols[4].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{row['bathrooms']}</div></div>", unsafe_allow_html=True)
+            cols[5].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{row['parking']}</div></div>", unsafe_allow_html=True)
+            cols[6].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-muted'>{row['land_size']}</div></div>", unsafe_allow_html=True)
+            cols[7].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{row['suburb'] if pd.notna(row.get('suburb')) else 'N/A'}</div></div>", unsafe_allow_html=True)
+            cols[8].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-muted'>{row['agency_name'] if pd.notna(row.get('agency_name')) else 'N/A'}</div></div>", unsafe_allow_html=True)
+        return
     st.dataframe(
         comparison[[
             "address",
@@ -1427,18 +1982,136 @@ def _render_comparison_table(shortlist_df: pd.DataFrame) -> None:
     )
 
 
+def _resolve_commute_filter(df: pd.DataFrame, suburb_lookup: pd.DataFrame, *, query: str, mode: str, max_minutes: int) -> tuple[list[str], set[str], pd.DataFrame, dict[str, object], str | None]:
+    origin = resolve_commute_origin(query, suburb_lookup, df)
+    fallback_label = _format_commute_chip(mode=mode, max_minutes=int(max_minutes), label=str(query).strip())
+    if not origin.get("matched"):
+        return [], set(), pd.DataFrame(), origin, fallback_label
+
+    commute_df = compute_commute_listing_frame(
+        origin_lat=float(origin["latitude"]),
+        origin_lon=float(origin["longitude"]),
+        listing_df=df,
+        mode=mode,
+    )
+    if commute_df.empty:
+        suburb_commute_df = compute_commute_suburb_frame(
+            origin_lat=float(origin["latitude"]),
+            origin_lon=float(origin["longitude"]),
+            suburb_lookup=suburb_lookup,
+            mode=mode,
+        )
+        matched_suburbs = suburb_commute_df.loc[suburb_commute_df["commute_minutes"] <= float(max_minutes)].copy()
+        allowed_suburbs = matched_suburbs["suburb"].astype(str).dropna().drop_duplicates().tolist()
+        return allowed_suburbs, set(), matched_suburbs, origin, _format_commute_chip(mode=mode, max_minutes=int(max_minutes), label=str(origin["label"]))
+    matched = commute_df.loc[commute_df["commute_minutes"] <= float(max_minutes)].copy()
+    allowed_suburbs = matched["suburb"].astype(str).dropna().drop_duplicates().tolist()
+    allowed_listing_ids = set(matched["listing_id"].astype(str).dropna().tolist())
+
+    mode_label = {
+        "drive": tr("å¼€è½¦", "Drive"),
+        "transit": tr("å…¬å…±äº¤é€š", "Public transport"),
+        "walk": tr("æ­¥è¡Œ", "Walking"),
+    }.get(mode, tr("å¼€è½¦", "Drive"))
+    chip = tr("é€šå‹¤", "Commute") + f": {int(max_minutes)} min {mode_label} to {origin['label']}"
+    return allowed_suburbs, allowed_listing_ids, matched, origin, chip
+
+
+def _format_commute_chip(*, mode: str, max_minutes: int, label: str) -> str:
+    mode_label = {
+        "drive": tr("\u8f66\u7a0b", "drive"),
+        "transit": tr("\u516c\u5171\u4ea4\u901a", "public transport"),
+        "walk": tr("\u6b65\u884c", "walk"),
+    }.get(mode, tr("\u8f66\u7a0b", "drive"))
+    return (
+        tr("\u901a\u52e4\uff1a", "Commute:")
+        + f" {int(max_minutes)} "
+        + tr(f"\u5206\u949f{mode_label}\u5230", f"min {mode_label} to")
+        + f" {label}"
+    )
+
+
+def _format_summary_budget_range(min_value: int, max_value: int) -> str:
+    return f"{_money(min_value)} – {_money(max_value)}"
+
+
+def _render_external_buy_applied_filter_summary(filters: dict[str, object]) -> None:
+    filters = dict(filters)
+    filters["selected_sort"] = _buy_sort_label(filters.get("selected_sort"))
+    lines = [
+        tr("当前筛选：", "Active filters:"),
+        f"{tr('预算', 'Budget')}: {_format_summary_budget_range(int(filters['budget_min']), int(filters['budget_max']))}",
+    ]
+    commute_summary = _format_applied_commute_summary(filters)
+    if commute_summary:
+        lines.append(commute_summary)
+    if filters.get("selected_property_groups"):
+        lines.append(
+            f"{tr('房产大类', 'Property type')}: "
+            + ", ".join(_title_case_subtype(group) for group in filters["selected_property_groups"])
+        )
+    if filters.get("selected_property_subtypes"):
+        lines.append(
+            f"{tr('细分类', 'Subtypes')}: "
+            + ", ".join(_title_case_subtype(subtype) for subtype in filters["selected_property_subtypes"])
+        )
+    if filters.get("min_bedrooms"):
+        lines.append(
+            _format_applied_threshold(
+                tr("卧室", "Bedrooms"),
+                int(filters["min_bedrooms"]),
+                exact=bool(filters.get("exact_bedrooms", False)),
+            )
+        )
+    if filters.get("min_bathrooms"):
+        lines.append(
+            _format_applied_threshold(
+                tr("卫生间", "Bathrooms"),
+                int(filters["min_bathrooms"]),
+                exact=bool(filters.get("exact_bathrooms", False)),
+            )
+        )
+    if filters.get("min_parking"):
+        lines.append(
+            _format_applied_threshold(
+                tr("车位", "Parking"),
+                int(filters["min_parking"]),
+                exact=bool(filters.get("exact_parking", False)),
+            )
+        )
+    if filters.get("selected_suburbs"):
+        lines.append(f"{tr('重点 suburb', 'Priority suburb')}: {', '.join(filters['selected_suburbs'])}")
+    if filters.get("selected_postcodes"):
+        lines.append(f"{tr('邮编', 'Postcode')}: {', '.join(filters['selected_postcodes'])}")
+    lines.append(f"{tr('排序', 'Sort')}: {filters['selected_sort']}")
+    st.markdown("  \n".join([line for line in lines if line]))
+
+
 def main() -> None:
     perf = PagePerf("buy_budget")
     ensure_lang()
     inject_app_theme()
     _init_state()
 
-    st.markdown(f"<div class='budget-kicker'>{tr('买家工作流', 'Buyer Workflow')}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='budget-title'>{tr('预算地图', 'Budget Map')}</div>", unsafe_allow_html=True)
-    st.markdown(
-        f"<div class='budget-note'>{tr('核心问题：这笔预算在什么地方最有机会买到合适房源？', 'Core question: where does this budget give the buyer the best chance of finding a suitable home?')}</div>",
-        unsafe_allow_html=True,
-    )
+    if IS_EXTERNAL_MODE:
+        with st.sidebar:
+            sidebar_common(include_dwelling=False)
+        render_external_page_header(
+            badge=tr("Public Beta", "Public Beta"),
+            title=tr("买房预算地图", "Buy Budget"),
+            note=tr(
+                "测试版可帮助你快速找到更符合预算、通勤和房型偏好的房源与 suburb。",
+                "Public beta to quickly narrow homes and suburbs that fit your budget, commute, and property preferences.",
+            ),
+        )
+
+    if not IS_EXTERNAL_MODE:
+        st.markdown(f"<div class='budget-kicker'>{tr('买家工作流', 'Buyer Workflow')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='budget-title'>{tr('预算地图', 'Budget Map')}</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='budget-note'>{tr('核心问题：这笔预算在什么地方最有机会买到合适房源？', 'Core question: where does this budget give the buyer the best chance of finding a suitable home?')}</div>",
+            unsafe_allow_html=True,
+        )
 
     with perf.track("source_data_load"):
         source_status = get_domain_listing_source_status()
@@ -1447,30 +2120,66 @@ def main() -> None:
         st.error(tr("未找到可用的 Domain 房源 parquet 文件。", "No Domain listing parquet file was found."))
         st.code(source_status["path"])
         return
+    if IS_EXTERNAL_MODE:
+        df = apply_external_sale_listing_display_filter(df)
+    suburb_centroid_lookup = build_suburb_centroid_lookup(df)
 
     min_budget, max_budget = _normalise_bounds(df)
-    _ensure_budget_input_state(min_budget, max_budget)
-    _apply_pending_budget_widget_state(min_budget, max_budget)
-    shortlist_count = len(_get_shortlist_ids())
+    external_budget_options = _build_external_sale_budget_scale() if IS_EXTERNAL_MODE else []
+    _init_budget_filter_state(min_budget, max_budget)
+    if IS_EXTERNAL_MODE:
+        applied_filters = _merge_filter_defaults(st.session_state.get("budget_applied_filters"), min_budget, max_budget)
+        st.session_state["budget_applied_filters"] = applied_filters
+        _apply_pending_external_buy_reset(external_budget_options)
+        applied_filters = _merge_filter_defaults(st.session_state.get("budget_applied_filters"), min_budget, max_budget)
+        st.session_state["budget_applied_filters"] = applied_filters
+        _initialise_external_buy_widget_state_from_applied(applied_filters, external_budget_options)
+    else:
+        applied_filters = st.session_state.get("budget_applied_filters", _default_budget_filters(min_budget, max_budget))
+    external_budget_range = _coerce_external_budget_range(
+        st.session_state.get("budget_external_applied_range") if IS_EXTERNAL_MODE else st.session_state.get("budget_external_applied_range"),
+        options=external_budget_options,
+        default_range=(int(applied_filters.get("budget_min", min_budget)), int(applied_filters.get("budget_max", max_budget))),
+    ) if IS_EXTERNAL_MODE else (min_budget, max_budget)
+    if not IS_EXTERNAL_MODE:
+        _ensure_budget_input_state(min_budget, max_budget)
+        _apply_pending_budget_widget_state(min_budget, max_budget)
+    shortlist_ids = set(_get_shortlist_ids())
+    shortlist_count = len(shortlist_ids)
     search_submitted = False
+    reset_submitted = False
 
     with st.container(border=True):
         with st.form("budget_search_form", border=False):
             budget_col, filter_col = st.columns([1.25, 2.0])
             with budget_col:
                 st.markdown(f"<div class='budget-budget-pill'>{tr('当前预算', 'Current budget')}: {_money(min_budget)} - {_money(max_budget)}</div>", unsafe_allow_html=True)
-                input_cols = st.columns(2)
-                with input_cols[0]:
-                    st.text_input(
+                if IS_EXTERNAL_MODE:
+                    budget_min, budget_max = st.select_slider(
+                        tr("预算区间", "Budget range"),
+                        options=external_budget_options,
+                        value=external_budget_range,
+                        format_func=_format_external_sale_budget_label,
+                    )
+                    st.caption(
+                        tr(
+                            "低价段使用更细的预算档位，高价段使用更宽的档位，以便更快浏览房源。",
+                            "Lower price bands use finer steps and higher price bands use broader steps for faster browsing.",
+                        )
+                    )
+                if not IS_EXTERNAL_MODE:
+                    input_cols = st.columns(2)
+                    with input_cols[0]:
+                        st.text_input(
                         tr("最低预算", "Min budget"),
                         key="budget_min_input",
                     )
-                with input_cols[1]:
-                    st.text_input(
+                    with input_cols[1]:
+                        st.text_input(
                         tr("最高预算", "Max budget"),
                         key="budget_max_input",
                     )
-                budget_min, budget_max = st.slider(
+                budget_min, budget_max = (budget_min, budget_max) if IS_EXTERNAL_MODE else st.slider(
                     tr("预算区间", "Budget range"),
                     min_value=min_budget,
                     max_value=max_budget,
@@ -1478,7 +2187,7 @@ def main() -> None:
                     format="$%d",
                     key="budget_range_slider",
                 )
-                if st.session_state.get("budget_input_error"):
+                if not IS_EXTERNAL_MODE and st.session_state.get("budget_input_error"):
                     st.warning(st.session_state["budget_input_error"])
                 st.caption(tr("预算是整个页面的主驱动，其他条件都建立在它之上。", "Budget is the main driver of this page; the other filters sit on top of it."))
             with filter_col:
@@ -1494,6 +2203,100 @@ def main() -> None:
                 with row3:
                     pass
                     current_min_bedrooms = int(st.session_state.get("budget_min_bedrooms", 0))
+                commute_query = ""
+                commute_mode = "drive"
+                commute_minutes = 30
+                if False and IS_EXTERNAL_MODE:
+                    commute_col1, commute_col2, commute_col3 = st.columns([1.7, 1.0, 0.9])
+                    with commute_col1:
+                        commute_query = st.text_input(
+                            tr("è·ç¦»ç­›é€‰", "Commute filter"),
+                            key="budget_commute_query",
+                            placeholder=tr("è¾“å…¥ suburbã€postcode æˆ– address", "Enter a suburb, postcode, or address"),
+                        )
+                    with commute_col2:
+                        commute_mode = st.selectbox(
+                            tr("å‡ºè¡Œæ–¹å¼", "Travel mode"),
+                            options=["drive", "transit", "walk"],
+                            format_func=lambda value: {
+                                "drive": tr("å¼€è½¦", "Drive"),
+                                "transit": tr("å…¬å…±äº¤é€š", "Public transport"),
+                                "walk": tr("æ­¥è¡Œ", "Walking"),
+                            }[value],
+                            key="budget_commute_mode",
+                        )
+                    with commute_col3:
+                        commute_minutes = st.selectbox(
+                            tr("é€šå‹¤æ—¶é—´", "Travel time"),
+                            options=[10, 20, 30, 45, 60],
+                            key="budget_commute_minutes",
+                        )
+                    st.caption(
+                        tr(
+                            "å¤–éƒ¨ç‰ˆå½“å‰ä½¿ç”¨ suburb centroid + ç›´çº¿è·ç¦»ä¼°ç®—é€šå‹¤æ—¶é—´ï¼ŒåŽç»­å¯æ›¿æ¢ä¸º Google Maps route APIã€‚",
+                            "The external demo estimates commute from resolved listing and suburb coordinates using a conservative travel-time model; it intentionally under-includes rather than showing implausible matches.",
+                        )
+                    )
+                if IS_EXTERNAL_MODE:
+                    commute_col1, commute_col2, commute_col3 = st.columns([1.7, 1.0, 0.9])
+                    with commute_col1:
+                        commute_query = st.text_input(
+                            tr("\u8ddd\u79bb\u7b5b\u9009", "Commute filter"),
+                            key="budget_commute_query",
+                            placeholder=tr("\u8f93\u5165 suburb \u6216 postcode", "Enter a suburb or postcode"),
+                        )
+                    with commute_col2:
+                        commute_mode = st.selectbox(
+                            tr("\u51fa\u884c\u65b9\u5f0f", "Travel mode"),
+                            options=["drive", "transit", "walk"],
+                            format_func=lambda value: {
+                                "drive": tr("\u5f00\u8f66", "Drive"),
+                                "transit": tr("\u516c\u5171\u4ea4\u901a", "Public transport"),
+                                "walk": tr("\u6b65\u884c", "Walking"),
+                            }[value],
+                            key="budget_commute_mode",
+                        )
+                    with commute_col3:
+                        commute_minutes = st.selectbox(
+                            tr("\u901a\u52e4\u65f6\u95f4", "Travel time"),
+                            options=[10, 20, 30, 45, 60],
+                            key="budget_commute_minutes",
+                        )
+                    st.caption(
+                        tr(
+                            "\u6d4b\u8bd5\u7248\u901a\u52e4\u7b5b\u9009\u5f53\u524d\u652f\u6301 suburb \u548c postcode\uff0c\u6682\u4e0d\u7a33\u5b9a\u652f\u6301\u5b8c\u6574\u8857\u9053\u5730\u5740\u3002",
+                            "In beta, the commute filter currently supports suburbs and postcodes. Full street addresses are not yet supported reliably.",
+                        )
+                    )
+
+                commute_allowed_suburbs: list[str] | None = None
+                commute_allowed_listing_ids: set[str] | None = None
+                commute_label: str | None = None
+                if IS_EXTERNAL_MODE and str(commute_query).strip():
+                    commute_allowed_suburbs, commute_allowed_listing_ids, _, commute_origin, commute_label = _resolve_commute_filter(
+                        df,
+                        suburb_centroid_lookup,
+                        query=commute_query,
+                        mode=commute_mode,
+                        max_minutes=int(commute_minutes),
+                    )
+                    if commute_origin.get("matched"):
+                        commute_label = _format_commute_chip(
+                            mode=commute_mode,
+                            max_minutes=int(commute_minutes),
+                            label=str(commute_origin["label"]),
+                        )
+                    st.session_state["budget_commute_notice"] = None if commute_origin.get("matched") else tr(
+                        "æ— æ³•è¯†åˆ«è¯¥åœ°ç‚¹ï¼Œè¯·ä¼˜å…ˆä½¿ç”¨ NSW suburbã€�postcode æˆ–å½“å‰æˆ¿æºåœ°å€ã€‚",
+                        "That location could not be resolved. Try an NSW suburb or postcode.",
+                    )
+                    if not commute_origin.get("matched"):
+                        st.session_state["budget_commute_notice"] = tr(
+                            "\u65e0\u6cd5\u8bc6\u522b\u8be5\u5730\u70b9\uff0c\u8bf7\u4f18\u5148\u4f7f\u7528 NSW suburb\u3001postcode \u6216\u5f53\u524d\u623f\u6e90\u5730\u5740\u3002",
+                            "That location could not be resolved. Try an NSW suburb or postcode.",
+                        )
+                else:
+                    st.session_state["budget_commute_notice"] = None
                 current_min_bathrooms = int(st.session_state.get("budget_min_bathrooms", 0))
                 current_min_parking = int(st.session_state.get("budget_min_parking", 0))
                 property_group_context, _ = _apply_budget_filters(
@@ -1510,14 +2313,37 @@ def main() -> None:
                     exact_bedrooms=bool(st.session_state.get("budget_exact_bedrooms", False)),
                     exact_bathrooms=bool(st.session_state.get("budget_exact_bathrooms", False)),
                     exact_parking=bool(st.session_state.get("budget_exact_parking", False)),
-                    include_budget=False,
+                    allowed_listing_ids=commute_allowed_listing_ids,
+                    allowed_suburbs=commute_allowed_suburbs,
+                    include_budget=True,
                     skip_filters={"property_group", "property_subtype"},
                 )
                 property_group_options = _property_group_options(property_group_context)
-                group_labels = [f"{label} ({count:,})" for _, label, count in property_group_options]
-                label_to_group = {f"{label} ({count:,})": group for group, label, count in property_group_options}
-                selected_group_labels = st.multiselect(tr("房产大类", "Property group"), options=group_labels, placeholder=tr("不限大类", "Any group"), key="budget_selected_group_labels")
-                selected_property_groups = [label_to_group[label] for label in selected_group_labels]
+                group_values = [group for group, _, _ in property_group_options]
+                group_label_map = {group: label for group, label, _ in property_group_options}
+                group_count_map = {group: count for group, _, count in property_group_options}
+                applied_group_values = _valid_selected(
+                    st.session_state.get("budget_applied_filters", {}).get("selected_property_groups", []),
+                    group_values,
+                )
+                current_group_values = st.session_state.get("budget_selected_group_labels")
+                if current_group_values is None or any(group not in group_values for group in current_group_values):
+                    st.session_state["budget_selected_group_labels"] = applied_group_values
+                selected_group_values = st.multiselect(
+                    tr("房产大类", "Property type"),
+                    options=group_values,
+                    placeholder=tr("不限大类", "Any group"),
+                    format_func=lambda group: f"{group_label_map[group]} ({group_count_map[group]:,})",
+                    key="budget_selected_group_labels",
+                )
+                previous_group_selection = list(st.session_state.get("budget_applied_filters", {}).get("selected_property_groups", []))
+                valid_group_selection = _valid_selected(previous_group_selection, group_values)
+                invalid_group_selection = [value for value in previous_group_selection if value not in set(group_values)]
+                st.session_state["budget_group_notice"] = (
+                    tr("所选房产大类在当前筛选条件下已无可用结果，系统已清除该选择。", "The selected property group is no longer available under the current filters, so it was cleared.")
+                    if invalid_group_selection and not property_group_context.empty else None
+                )
+                selected_property_groups = list(selected_group_values)
 
             row4, row5, row6, row7 = st.columns([1.0, 1.0, 1.0, 1.1])
             with row4:
@@ -1537,60 +2363,159 @@ def main() -> None:
                     tr("卧室数", "Bedrooms"): ("bedrooms", False),
                     tr("Suburb", "Suburb"): ("suburb", True),
                 }
-                selected_sort = st.selectbox(tr("列表排序", "Listing sort"), options=list(sort_options.keys()), key="budget_selected_sort")
+                selected_sort = st.selectbox(
+                    tr("列表排序", "Listing sort"),
+                    options=list(BUY_SORT_SPECS.keys()),
+                    format_func=_buy_sort_label,
+                    key="budget_selected_sort",
+                )
 
             selected_property_subtypes: list[str] = []
-            if st.toggle(tr("显示细分类", "Show subtype filter"), value=False):
+            if st.toggle(tr("显示细分类", "Show subtype filter"), value=bool(st.session_state.get("budget_show_subtypes", False)), key="budget_show_subtypes"):
                 subtype_cols = st.columns(min(max(len(property_group_options), 1), 3))
                 for idx, (group, label, count) in enumerate(property_group_options):
                     with subtype_cols[idx % len(subtype_cols)]:
                         with st.expander(f"{label} ({count:,})", expanded=group in selected_property_groups):
                             subtype_count_series = _subtype_counts(property_group_context, group)
-                            subtype_labels = [f"{_title_case_subtype(subtype)} ({int(sub_count):,})" for subtype, sub_count in subtype_count_series.items()]
-                            subtype_label_to_value = {f"{_title_case_subtype(subtype)} ({int(sub_count):,})": subtype for subtype, sub_count in subtype_count_series.items()}
-                            default_labels = subtype_labels if group in selected_property_groups else []
-                            picked_labels = st.multiselect(
-                                tr("选择细分类", "Select subtypes"),
-                                options=subtype_labels,
-                                default=default_labels,
-                                key=f"subtypes_{group}",
+                            subtype_values = list(subtype_count_series.index)
+                            state_key = f"budget_subtypes_{group}"
+                            applied_subtypes = set(st.session_state.get("budget_applied_filters", {}).get("selected_property_subtypes", []))
+                            applied_group_subtypes = _valid_selected(
+                                [subtype for subtype in subtype_values if subtype in applied_subtypes],
+                                subtype_values,
                             )
-                            selected_property_subtypes.extend([subtype_label_to_value[item] for item in picked_labels])
+                            current_group_subtypes = st.session_state.get(state_key)
+                            if current_group_subtypes is None or any(subtype not in subtype_values for subtype in current_group_subtypes):
+                                st.session_state[state_key] = applied_group_subtypes
+                            picked_values = st.multiselect(
+                                tr("选择细分类", "Select subtypes"),
+                                options=subtype_values,
+                                format_func=lambda subtype, counts=subtype_count_series: f"{_title_case_subtype(subtype)} ({int(counts.get(subtype, 0)):,})",
+                                key=state_key,
+                            )
+                            selected_property_subtypes.extend(picked_values)
 
-            _render_filter_chips(selected_property_groups, selected_property_subtypes, selected_suburbs, selected_postcodes, min_bedrooms, min_bathrooms, min_parking)
-            search_submitted = st.form_submit_button("Search", type="primary", use_container_width=True)
+            _render_filter_chips(selected_property_groups, selected_property_subtypes, selected_suburbs, selected_postcodes, min_bedrooms, min_bathrooms, min_parking, commute_label=commute_label)
+            action_cols = st.columns(2)
+            with action_cols[0]:
+                search_submitted = st.form_submit_button(tr("搜索", "Search"), type="primary", use_container_width=True)
+            with action_cols[1]:
+                reset_submitted = st.form_submit_button(tr("重置筛选", "Reset filters"), use_container_width=True)
             st.caption(tr("房产大类后的数量按当前预算、suburb、postcode 与房型要求实时计算，不包含大类筛选本身。", "Property-group counts are computed from the current budget, suburb, postcode, and bed/bath/parking context, excluding the property-group filter itself."))
+    if IS_EXTERNAL_MODE and reset_submitted:
+        _reset_external_buy_filters(min_budget, max_budget, external_budget_options)
+        st.rerun()
     if search_submitted:
-        if _resolve_budget_submit_form_safe(
-            min_budget=min_budget,
-            max_budget=max_budget,
-            slider_range=(budget_min, budget_max),
-            text_min_raw=st.session_state.get("budget_min_input"),
-            text_max_raw=st.session_state.get("budget_max_input"),
-        ):
-            st.rerun()
-        budget_min, budget_max = st.session_state["budget_range_slider"]
+        if IS_EXTERNAL_MODE:
+            st.session_state["budget_external_applied_range"] = (budget_min, budget_max)
+            st.session_state["budget_applied_filters"] = _merge_filter_defaults(
+                {
+                    "budget_min": budget_min,
+                    "budget_max": budget_max,
+                    "selected_suburbs": list(selected_suburbs),
+                    "selected_postcodes": list(selected_postcodes),
+                    "selected_property_groups": list(selected_property_groups),
+                    "selected_property_subtypes": sorted(set(selected_property_subtypes)),
+                    "commute_query": str(commute_query),
+                    "commute_mode": str(commute_mode),
+                    "commute_minutes": int(commute_minutes),
+                    "min_bedrooms": int(min_bedrooms),
+                    "min_bathrooms": int(min_bathrooms),
+                    "min_parking": int(min_parking),
+                    "exact_bedrooms": bool(st.session_state.get("budget_exact_bedrooms", False)),
+                    "exact_bathrooms": bool(st.session_state.get("budget_exact_bathrooms", False)),
+                    "exact_parking": bool(st.session_state.get("budget_exact_parking", False)),
+                    "selected_sort": _coerce_buy_sort_key(selected_sort),
+                    "show_subtypes": bool(st.session_state.get("budget_show_subtypes", False)),
+                    "commute_label": commute_label,
+                },
+                min_budget,
+                max_budget,
+            )
+            st.session_state["buy_external_search_triggered"] = True
+        else:
+            if _resolve_budget_submit_form_safe(
+                min_budget=min_budget,
+                max_budget=max_budget,
+                slider_range=(budget_min, budget_max),
+                text_min_raw=st.session_state.get("budget_min_input"),
+                text_max_raw=st.session_state.get("budget_max_input"),
+            ):
+                st.rerun()
+            budget_min, budget_max = st.session_state["budget_range_slider"]
+    external_search_triggered = True if not IS_EXTERNAL_MODE else bool(st.session_state.get("buy_external_search_triggered", False))
+
+    if IS_EXTERNAL_MODE and not external_search_triggered:
+        with st.container(border=True):
+            st.markdown(f"**{tr('排序 suburb', 'Ranked Suburbs')}**")
+            st.info(tr("请设置筛选条件并点击搜索以查看结果", "Apply filters and click Search to view results"))
+        with st.container(border=True):
+            st.markdown(f"**{tr('房源浏览', 'Listings')}**")
+            st.info(tr("请设置筛选条件并点击搜索以查看结果", "Apply filters and click Search to view results"))
+        with st.container(border=True):
+            status_cols = st.columns([2.5, 1])
+            with status_cols[0]:
+                st.markdown(f"**{tr('Shortlist', 'Shortlist')}**")
+                st.markdown(f"<div class='budget-shortlist-status'>{tr('当前已加入', 'Currently shortlisted')}: {shortlist_count} {tr('套房源', 'listings')}</div>", unsafe_allow_html=True)
+            with status_cols[1]:
+                if shortlist_count > 0 and st.button(tr("清空 shortlist", "Clear shortlist"), use_container_width=True):
+                    _set_shortlist_ids(set())
+                    st.session_state["budget_shortlist_items"] = {}
+                    st.rerun()
+        timing_payload = perf.log(shortlisted=len(_get_shortlist_ids()), filtered_rows=0)
+        render_internal_timing_summary(timing_payload, enabled=not IS_EXTERNAL_MODE)
+        return
+    exact_bedrooms = bool(st.session_state.get("budget_exact_bedrooms", False))
+    exact_bathrooms = bool(st.session_state.get("budget_exact_bathrooms", False))
+    exact_parking = bool(st.session_state.get("budget_exact_parking", False))
+    if IS_EXTERNAL_MODE:
+        effective_filters = _merge_filter_defaults(st.session_state.get("budget_applied_filters"), min_budget, max_budget)
+        budget_min = int(effective_filters["budget_min"])
+        budget_max = int(effective_filters["budget_max"])
+        selected_property_groups = list(effective_filters.get("selected_property_groups", []))
+        selected_property_subtypes = list(effective_filters.get("selected_property_subtypes", []))
+        selected_suburbs = list(effective_filters.get("selected_suburbs", []))
+        selected_postcodes = list(effective_filters.get("selected_postcodes", []))
+        min_bedrooms = int(effective_filters.get("min_bedrooms", 0))
+        min_bathrooms = int(effective_filters.get("min_bathrooms", 0))
+        min_parking = int(effective_filters.get("min_parking", 0))
+        selected_sort = _coerce_buy_sort_key(effective_filters.get("selected_sort", selected_sort))
+        commute_query = str(effective_filters.get("commute_query", ""))
+        commute_mode = str(effective_filters.get("commute_mode", "drive"))
+        commute_minutes = int(effective_filters.get("commute_minutes", 30))
+        exact_bedrooms = bool(effective_filters.get("exact_bedrooms", False))
+        exact_bathrooms = bool(effective_filters.get("exact_bathrooms", False))
+        exact_parking = bool(effective_filters.get("exact_parking", False))
+        commute_allowed_listing_ids: set[str] | None = None
+        if commute_query.strip():
+            commute_allowed_suburbs, commute_allowed_listing_ids, _, commute_origin, commute_label = _resolve_commute_filter(
+                df,
+                suburb_centroid_lookup,
+                query=commute_query,
+                mode=commute_mode,
+                max_minutes=int(commute_minutes),
+            )
+            st.session_state["budget_commute_notice"] = None if commute_origin.get("matched") else tr(
+                "无法识别该地点，请优先使用 NSW suburb、postcode 或当前房源地址。",
+                "That location could not be resolved. Try an NSW suburb or postcode.",
+            )
+            if commute_origin.get("matched"):
+                commute_label = _format_commute_chip(
+                    mode=commute_mode,
+                    max_minutes=int(commute_minutes),
+                    label=commute_origin["label"],
+                )
+        else:
+            commute_allowed_suburbs = None
+            commute_allowed_listing_ids = None
+            commute_origin = {"matched": False, "label": ""}
+            commute_label = None
+            st.session_state["budget_commute_notice"] = None
+    commute_notice = st.session_state.get("budget_commute_notice")
+    group_notice = st.session_state.get("budget_group_notice")
     full_budget_selected = _full_budget_selected(budget_min, budget_max, min_budget, max_budget)
     with (st.spinner("Searching...") if search_submitted else nullcontext()):
         with perf.track("filter_application"):
-            context_listings, _ = _apply_budget_filters(
-                df,
-                budget_min=budget_min,
-                budget_max=budget_max,
-                min_budget=min_budget,
-                max_budget=max_budget,
-                selected_property_groups=selected_property_groups,
-                selected_property_subtypes=selected_property_subtypes,
-                selected_suburbs=selected_suburbs,
-                selected_postcodes=selected_postcodes,
-                min_bedrooms=min_bedrooms,
-                min_bathrooms=min_bathrooms,
-                min_parking=min_parking,
-                exact_bedrooms=bool(st.session_state.get("budget_exact_bedrooms", False)),
-                exact_bathrooms=bool(st.session_state.get("budget_exact_bathrooms", False)),
-                exact_parking=bool(st.session_state.get("budget_exact_parking", False)),
-                include_budget=False,
-            )
             filtered_listings, filter_debug_steps = _apply_budget_filters(
                 df,
                 budget_min=budget_min,
@@ -1604,13 +2529,36 @@ def main() -> None:
                 min_bedrooms=min_bedrooms,
                 min_bathrooms=min_bathrooms,
                 min_parking=min_parking,
-                exact_bedrooms=bool(st.session_state.get("budget_exact_bedrooms", False)),
-                exact_bathrooms=bool(st.session_state.get("budget_exact_bathrooms", False)),
-                exact_parking=bool(st.session_state.get("budget_exact_parking", False)),
+                exact_bedrooms=exact_bedrooms,
+                exact_bathrooms=exact_bathrooms,
+                exact_parking=exact_parking,
+                allowed_listing_ids=commute_allowed_listing_ids,
+                allowed_suburbs=commute_allowed_suburbs,
             )
+            context_listings = filtered_listings.copy() if IS_EXTERNAL_MODE else _apply_budget_filters(
+                df,
+                budget_min=budget_min,
+                budget_max=budget_max,
+                min_budget=min_budget,
+                max_budget=max_budget,
+                selected_property_groups=selected_property_groups,
+                selected_property_subtypes=selected_property_subtypes,
+                selected_suburbs=selected_suburbs,
+                selected_postcodes=selected_postcodes,
+                min_bedrooms=min_bedrooms,
+                min_bathrooms=min_bathrooms,
+                min_parking=min_parking,
+                exact_bedrooms=exact_bedrooms,
+                exact_bathrooms=exact_bathrooms,
+                exact_parking=exact_parking,
+                allowed_listing_ids=commute_allowed_listing_ids,
+                allowed_suburbs=commute_allowed_suburbs,
+                include_budget=False,
+            )[0]
 
-    sort_column, sort_ascending = sort_options[selected_sort]
+    sort_column, sort_ascending = BUY_SORT_SPECS[_coerce_buy_sort_key(selected_sort)]
     filtered_listings = filtered_listings.sort_values(by=[sort_column, "suburb", "address"], ascending=[sort_ascending, True, True], na_position="last")
+    display_listings = _prepare_external_display_listings(filtered_listings, sort_column=sort_column, sort_ascending=sort_ascending) if IS_EXTERNAL_MODE else filtered_listings
     with perf.track("ranking_table_prep"):
         suburb_summary = _suburb_summary(context_listings, budget_min=budget_min, budget_max=budget_max)
 
@@ -1625,12 +2573,19 @@ def main() -> None:
         selected_suburb = "__ALL__"
 
     focused_listings = filtered_listings.loc[filtered_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else filtered_listings.copy()
+    focused_display_listings = display_listings.loc[display_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else display_listings.copy()
     insight_scope = focused_listings if selected_suburb != "__ALL__" else filtered_listings
     context_scope = context_listings.loc[context_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else context_listings
     focused_summary = suburb_summary.loc[suburb_summary["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else suburb_summary
     insight = _budget_insight(insight_scope, context_scope, budget_max, focused_suburb=selected_suburb)
-    shortlist_df = _build_shortlist_df(df)
-    shortlist_df = shortlist_df.sort_values(by=["price_mid", "suburb", "address"], ascending=[True, True, True], na_position="last")
+    if IS_EXTERNAL_MODE:
+        shortlist_df = display_listings.loc[display_listings["listing_id"].astype(str).isin(shortlist_ids)].copy()
+        shortlist_count = int(len(shortlist_df))
+    else:
+        shortlist_df = _build_shortlist_df(df)
+        shortlist_df = shortlist_df.sort_values(by=["price_mid", "suburb", "address"], ascending=[True, True, True], na_position="last")
+    if IS_EXTERNAL_MODE and {"sort_has_numeric", "sort_primary", "suburb", "address"}.issubset(shortlist_df.columns):
+        shortlist_df = shortlist_df.sort_values(by=["sort_has_numeric", "sort_primary", "suburb", "address"], ascending=[False, sort_ascending, True, True], na_position="last")
     show_debug = (not IS_EXTERNAL_MODE) and str(st.query_params.get("budget_debug", "0")) == "1"
     focus_notice = _consume_focus_notice("budget_focus_notice")
 
@@ -1652,6 +2607,16 @@ def main() -> None:
                 f"unpriced listings are only included when the full market budget range is selected ({full_budget_selected})."
             )
 
+    if commute_notice:
+        st.warning(commute_notice)
+    if group_notice:
+        st.warning(group_notice)
+    if IS_EXTERNAL_MODE:
+        filters_for_summary = dict(effective_filters)
+        if commute_label:
+            filters_for_summary["commute_label"] = commute_label
+        with st.container(border=True):
+            _render_external_buy_applied_filter_summary(filters_for_summary)
     if filtered_listings.empty:
         st.warning(tr("当前筛选条件下没有匹配房源。", "No listings match the current filters."))
     else:
@@ -1667,6 +2632,8 @@ def main() -> None:
         with metrics_cols[3]:
             st.metric(tr("匹配房源", "Matching listings"), f"{insight['listing_count']:,}")
 
+        if commute_label and not commute_notice:
+            st.caption(commute_label)
         with st.container(border=True):
             st.markdown(f"**{tr('预算结论', 'Budget conclusion')}**")
             st.write(insight["conclusion"])
@@ -1693,7 +2660,7 @@ def main() -> None:
             st.caption(tr("地图现在是主要决策层：先看 suburb 覆盖率，再查看所选 suburb 内的房源点位。", "The map is now the main decision layer: read suburb coverage first, then inspect listing markers inside the selected suburb."))
             with perf.track("map_prep"):
                 selected_suburb = _build_map(filtered_listings, suburb_summary, selected_suburb)
-        focus_listings = focused_listings
+        focus_listings = focused_display_listings if IS_EXTERNAL_MODE else focused_listings
         with st.container(border=True):
             st.markdown(f"**{tr('房源浏览', 'Listings')}**")
             st.caption(tr("价格和地址优先，其次才是图片与其他细节。", "Price and address come first, with image and details supporting the decision."))
