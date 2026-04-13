@@ -46,6 +46,16 @@ BAND_NAMES = [band[2] for band in PRICE_BANDS]
 STABLE_RATIO = 0.55
 LONG_TREND_MIN_MEDIAN_SALES = 20
 LOWER_GEO_LONG_TREND_MIN_MEDIAN_SALES = 5
+REGION16_SEGMENTED_LONG_TREND_MIN_MEDIAN_SALES = 10
+REGION16_SEGMENTED_REGIONS = {
+    "Lower North Shore — Core",
+    "Lower North Shore — Extended",
+    "Upper North Shore — Core",
+    "Upper North Shore — Extended",
+}
+MARKET_VIEW_ANCHOR_OVERRIDE_DATES = {
+    ("REGION", "Greater Sydney", "HOUSE"): pd.Timestamp("2026-01-01"),
+}
 TIME_OPTIONS = ["1 Month", "3 Month", "6 Month", "YTD", "1 Year", "3 Year", "5 Year", "10 Year", "Max"]
 def _display_mode_labels() -> dict[str, str]:
     return {
@@ -744,72 +754,272 @@ def _empty_focus_metrics() -> dict[str, object]:
         "latest_stable_point": None,
         "latest_available_point": None,
         "latest_visible_point": None,
+        "prior_year_point": None,
+        "prior_year_median": None,
         "range_high": None,
         "range_low": None,
         "stable_yoy": None,
         "sales": None,
-        "display_anchor_is_fallback": False,
     }
 
 
-def _build_focus_metrics(summary_full_df: pd.DataFrame, summary_visible_df: pd.DataFrame) -> dict[str, object]:
-    fallback_gap_days = 7
+def _resolve_latest_stable_anchor(plot_df_all: pd.DataFrame) -> dict[str, object] | None:
+    if plot_df_all is None or plot_df_all.empty:
+        return None
+
+    stable_full_df = plot_df_all.copy()
+    stable_full_df["event_time"] = pd.to_datetime(stable_full_df["event_time"], errors="coerce").dt.normalize()
+    stable_full_df["value"] = pd.to_numeric(stable_full_df["value"], errors="coerce")
+    stable_full_df["sales_28d"] = pd.to_numeric(stable_full_df["sales_28d"], errors="coerce")
+    stable_full_df = stable_full_df[
+        stable_full_df["event_time"].notna()
+        & stable_full_df["value"].notna()
+        & stable_full_df["stable"].fillna(False)
+    ].copy()
+    if stable_full_df.empty:
+        return None
+
+    stable_full_df = stable_full_df.sort_values("event_time")
+    latest_stable = stable_full_df.iloc[-1]
+    return {
+        "date": pd.to_datetime(latest_stable["event_time"], errors="coerce").normalize(),
+        "median": latest_stable["value"],
+        "sales": latest_stable.get("sales_28d"),
+        "stable": True,
+        "region": latest_stable.get("region"),
+    }
+
+
+def _resolve_market_view_anchor_override(level: str, region: str, dwelling: str) -> pd.Timestamp | None:
+    key = (str(level or "").strip().upper(), str(region or "").strip(), str(dwelling or "").strip().upper())
+    value = MARKET_VIEW_ANCHOR_OVERRIDE_DATES.get(key)
+    if value is None:
+        return None
+    return pd.to_datetime(value, errors="coerce").normalize()
+
+
+def _resolve_visible_stable_chart_anchor(
+    plot_df_all: pd.DataFrame,
+    *,
+    level: str,
+    dwelling: str,
+    display_mode: str,
+) -> dict[str, object] | None:
+    if plot_df_all is None or plot_df_all.empty:
+        return None
+
+    normalized_display_mode = _coerce_display_mode(display_mode)
+    visible_series = "underlying_trend" if normalized_display_mode == DISPLAY_MODE_LONG else "value"
+
+    frame = plot_df_all.copy()
+    frame["event_time"] = pd.to_datetime(frame["event_time"], errors="coerce").dt.normalize()
+    frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
+    if "underlying_trend" in frame.columns:
+        frame["underlying_trend"] = pd.to_numeric(frame["underlying_trend"], errors="coerce")
+    frame["sales_28d"] = pd.to_numeric(frame["sales_28d"], errors="coerce")
+
+    required_series = frame[frame["event_time"].notna()].copy()
+    required_series = required_series[required_series[visible_series].notna()].copy()
+    if required_series.empty:
+        return None
+
+    region_value = str(required_series["region"].iloc[0]) if "region" in required_series.columns and not required_series.empty else ""
+    override_date = _resolve_market_view_anchor_override(level, region_value, dwelling)
+    if override_date is not None:
+        override_row = required_series[required_series["event_time"] == override_date].copy()
+        if not override_row.empty:
+            chosen = override_row.sort_values("event_time").iloc[-1]
+            return {
+                "date": pd.to_datetime(chosen["event_time"], errors="coerce").normalize(),
+                "plotted_value": chosen[visible_series],
+                "raw_value": chosen["value"],
+                "sales": chosen.get("sales_28d"),
+                "stable": bool(chosen.get("stable", False)),
+                "region": chosen.get("region"),
+                "series_name": visible_series,
+                "transformed": visible_series != "value",
+            }
+
+    stable_frame = required_series[required_series["stable"].fillna(False)].copy()
+    if stable_frame.empty:
+        return None
+
+    stable_frame = stable_frame.sort_values("event_time")
+    latest_row = stable_frame.iloc[-1]
+    return {
+        "date": pd.to_datetime(latest_row["event_time"], errors="coerce").normalize(),
+        "plotted_value": latest_row[visible_series],
+        "raw_value": latest_row["value"],
+        "sales": latest_row.get("sales_28d"),
+        "stable": True,
+        "region": latest_row.get("region"),
+        "series_name": visible_series,
+        "transformed": visible_series != "value",
+    }
+
+
+def _resolve_visible_stable_prior_anchor(
+    plot_df_all: pd.DataFrame,
+    current_anchor_date: pd.Timestamp,
+    *,
+    display_mode: str,
+) -> dict[str, object] | None:
+    if plot_df_all is None or plot_df_all.empty or current_anchor_date is None or pd.isna(current_anchor_date):
+        return None
+
+    normalized_display_mode = _coerce_display_mode(display_mode)
+    visible_series = "underlying_trend" if normalized_display_mode == DISPLAY_MODE_LONG else "value"
+
+    stable_full_df = plot_df_all.copy()
+    stable_full_df["event_time"] = pd.to_datetime(stable_full_df["event_time"], errors="coerce").dt.normalize()
+    stable_full_df["value"] = pd.to_numeric(stable_full_df["value"], errors="coerce")
+    if "underlying_trend" in stable_full_df.columns:
+        stable_full_df["underlying_trend"] = pd.to_numeric(stable_full_df["underlying_trend"], errors="coerce")
+    stable_full_df["sales_28d"] = pd.to_numeric(stable_full_df["sales_28d"], errors="coerce")
+    stable_full_df = stable_full_df[
+        stable_full_df["event_time"].notna()
+        & stable_full_df[visible_series].notna()
+        & stable_full_df["stable"].fillna(False)
+    ].copy()
+    if stable_full_df.empty:
+        return None
+
+    target_date = pd.to_datetime(current_anchor_date, errors="coerce").normalize() - pd.Timedelta(days=365)
+    stable_full_df["_abs_day_gap"] = (stable_full_df["event_time"] - target_date).abs().dt.days
+    stable_full_df = stable_full_df.sort_values(["_abs_day_gap", "event_time"])
+    if stable_full_df.empty:
+        return None
+
+    prior_row = stable_full_df.iloc[0]
+    return {
+        "date": pd.to_datetime(prior_row["event_time"], errors="coerce").normalize(),
+        "plotted_value": prior_row[visible_series],
+        "raw_value": prior_row["value"],
+        "sales": prior_row.get("sales_28d"),
+        "stable": True,
+        "region": prior_row.get("region"),
+        "series_name": visible_series,
+        "transformed": visible_series != "value",
+    }
+
+
+def _resolve_prior_year_stable_anchor(plot_df_all: pd.DataFrame, latest_anchor_date: pd.Timestamp) -> dict[str, object] | None:
+    if plot_df_all is None or plot_df_all.empty or latest_anchor_date is None or pd.isna(latest_anchor_date):
+        return None
+
+    stable_full_df = plot_df_all.copy()
+    stable_full_df["event_time"] = pd.to_datetime(stable_full_df["event_time"], errors="coerce").dt.normalize()
+    stable_full_df["value"] = pd.to_numeric(stable_full_df["value"], errors="coerce")
+    stable_full_df["sales_28d"] = pd.to_numeric(stable_full_df["sales_28d"], errors="coerce")
+    stable_full_df = stable_full_df[
+        stable_full_df["event_time"].notna()
+        & stable_full_df["value"].notna()
+        & stable_full_df["stable"].fillna(False)
+    ].copy()
+    if stable_full_df.empty:
+        return None
+
+    target_date = pd.to_datetime(latest_anchor_date, errors="coerce").normalize() - pd.Timedelta(days=365)
+    stable_full_df["_abs_day_gap"] = (stable_full_df["event_time"] - target_date).abs().dt.days
+    stable_full_df = stable_full_df.sort_values(["_abs_day_gap", "event_time"])
+    if stable_full_df.empty:
+        return None
+
+    prior_row = stable_full_df.iloc[0]
+    return {
+        "date": pd.to_datetime(prior_row["event_time"], errors="coerce").normalize(),
+        "median": prior_row["value"],
+        "sales": prior_row.get("sales_28d"),
+        "stable": True,
+        "region": prior_row.get("region"),
+    }
+
+
+def _compute_latest_stable_yoy(
+    plot_df_all: pd.DataFrame,
+    *,
+    level: str,
+    dwelling: str,
+    display_mode: str,
+) -> dict[str, object]:
+    out = {
+        "latest_stable_date": None,
+        "latest_stable_median": None,
+        "latest_stable_sales": None,
+        "prior_year_date": None,
+        "prior_year_median": None,
+        "stable_yoy": None,
+        "latest_stable_raw_value": None,
+        "prior_year_raw_value": None,
+        "series_name": None,
+        "transformed": False,
+    }
+
+    latest_anchor = _resolve_visible_stable_chart_anchor(
+        plot_df_all,
+        level=level,
+        dwelling=dwelling,
+        display_mode=display_mode,
+    )
+    if latest_anchor is None:
+        return out
+
+    out["latest_stable_date"] = latest_anchor["date"]
+    out["latest_stable_median"] = latest_anchor["plotted_value"]
+    out["latest_stable_sales"] = latest_anchor["sales"]
+    out["latest_stable_raw_value"] = latest_anchor["raw_value"]
+    out["series_name"] = latest_anchor["series_name"]
+    out["transformed"] = latest_anchor["transformed"]
+
+    prior_anchor = _resolve_visible_stable_prior_anchor(
+        plot_df_all,
+        latest_anchor["date"],
+        display_mode=display_mode,
+    )
+    if prior_anchor is None:
+        return out
+
+    out["prior_year_date"] = prior_anchor["date"]
+    out["prior_year_median"] = prior_anchor["plotted_value"]
+    out["prior_year_raw_value"] = prior_anchor["raw_value"]
+    prior_median = prior_anchor["plotted_value"]
+    if prior_median is not None and not pd.isna(prior_median) and float(prior_median) != 0:
+        out["stable_yoy"] = latest_anchor["plotted_value"] / prior_median - 1.0
+
+    return out
+
+
+def _build_focus_metrics(
+    plot_df_all: pd.DataFrame,
+    summary_visible_df: pd.DataFrame,
+    *,
+    level: str,
+    dwelling: str,
+    display_mode: str,
+) -> dict[str, object]:
     latest_available_point = None
     latest_visible_point = None
-    if not summary_full_df.empty and "date" in summary_full_df.columns:
-        full_dates = pd.to_datetime(summary_full_df["date"], errors="coerce").dt.normalize().dropna()
+    if not plot_df_all.empty and "event_time" in plot_df_all.columns:
+        full_dates = pd.to_datetime(plot_df_all["event_time"], errors="coerce").dt.normalize().dropna()
         if not full_dates.empty:
             latest_available_point = full_dates.max()
     if not summary_visible_df.empty and "date" in summary_visible_df.columns:
         visible_dates = pd.to_datetime(summary_visible_df["date"], errors="coerce").dt.normalize().dropna()
         if not visible_dates.empty:
             latest_visible_point = visible_dates.max()
-    stable_full_df = summary_full_df[summary_full_df["stable"].fillna(False) & summary_full_df["rolling_median"].notna()].copy()
-    if stable_full_df.empty:
-        metrics = _empty_focus_metrics()
-        metrics["latest_available_point"] = latest_available_point
-        metrics["latest_visible_point"] = latest_visible_point
-        return metrics
-    stable_full_df["date"] = pd.to_datetime(stable_full_df["date"], errors="coerce").dt.normalize()
-    stable_full_df = stable_full_df[stable_full_df["date"].notna()].copy()
-    if stable_full_df.empty:
-        metrics = _empty_focus_metrics()
-        metrics["latest_available_point"] = latest_available_point
-        metrics["latest_visible_point"] = latest_visible_point
-        return metrics
-    stable_full_df = stable_full_df.sort_values("date")
-    latest_stable = stable_full_df.iloc[-1]
-    latest_stable_point = pd.to_datetime(latest_stable["date"], errors="coerce").normalize()
-    display_row = latest_stable
-    display_anchor_is_fallback = False
-    if latest_available_point is not None and pd.notna(latest_stable_point):
-        gap_days = (latest_available_point - latest_stable_point).days
-        if gap_days >= fallback_gap_days:
-            candidate_df = summary_full_df.copy()
-            candidate_df["date"] = pd.to_datetime(candidate_df["date"], errors="coerce").dt.normalize()
-            candidate_df = candidate_df[
-                candidate_df["date"].notna()
-                & candidate_df["rolling_median"].notna()
-                & (candidate_df["date"] > latest_stable_point)
-                & (~candidate_df["stable"].fillna(False))
-            ].sort_values("date")
-            if not candidate_df.empty:
-                display_row = candidate_df.iloc[0]
-                display_anchor_is_fallback = True
-    yoy_ref = stable_full_df[["region", "date", "rolling_median"]].rename(columns={"rolling_median": "median_365d"})
-    yoy_ref["date"] = pd.to_datetime(yoy_ref["date"], errors="coerce").dt.normalize() + pd.Timedelta(days=365)
-    latest_key = pd.DataFrame(
-        {
-            "region": [display_row["region"]],
-            "date": [pd.to_datetime(display_row["date"], errors="coerce").normalize()],
-        }
+
+    stable_metrics = _compute_latest_stable_yoy(
+        plot_df_all,
+        level=level,
+        dwelling=dwelling,
+        display_mode=display_mode,
     )
-    latest_key["date"] = pd.to_datetime(latest_key["date"], errors="coerce").dt.normalize()
-    latest_with_yoy = latest_key.merge(yoy_ref, on=["region", "date"], how="left")
-    median_365d = latest_with_yoy["median_365d"].iloc[0] if not latest_with_yoy.empty else None
-    stable_yoy = None
-    if median_365d is not None and not pd.isna(median_365d) and float(median_365d) != 0:
-        stable_yoy = display_row["rolling_median"] / median_365d - 1.0
+    if stable_metrics["latest_stable_date"] is None or stable_metrics["latest_stable_median"] is None:
+        metrics = _empty_focus_metrics()
+        metrics["latest_available_point"] = latest_available_point
+        metrics["latest_visible_point"] = latest_visible_point
+        return metrics
+
     stable_visible_df = summary_visible_df[summary_visible_df["stable"].fillna(False) & summary_visible_df["rolling_median"].notna()].copy()
     range_high = None
     range_low = None
@@ -817,16 +1027,20 @@ def _build_focus_metrics(summary_full_df: pd.DataFrame, summary_visible_df: pd.D
         range_high = stable_visible_df["rolling_median"].max()
         range_low = stable_visible_df["rolling_median"].min()
     return {
-        "latest_median": display_row["rolling_median"],
-        "latest_point": display_row["date"],
-        "latest_stable_point": latest_stable["date"],
+        "latest_median": stable_metrics["latest_stable_median"],
+        "latest_point": stable_metrics["latest_stable_date"],
+        "latest_stable_point": stable_metrics["latest_stable_date"],
         "latest_available_point": latest_available_point,
         "latest_visible_point": latest_visible_point,
+        "prior_year_point": stable_metrics["prior_year_date"],
+        "prior_year_median": stable_metrics["prior_year_median"],
+        "chart_anchor_raw_value": stable_metrics["latest_stable_raw_value"],
+        "chart_anchor_series": stable_metrics["series_name"],
+        "chart_anchor_transformed": stable_metrics["transformed"],
         "range_high": range_high,
         "range_low": range_low,
-        "stable_yoy": stable_yoy,
-        "sales": display_row.get("sales_28d"),
-        "display_anchor_is_fallback": display_anchor_is_fallback,
+        "stable_yoy": stable_metrics["stable_yoy"],
+        "sales": stable_metrics["latest_stable_sales"],
     }
 
 
@@ -1327,12 +1541,29 @@ def _long_trend_min_median_sales(level: str) -> float:
     return float(LONG_TREND_MIN_MEDIAN_SALES)
 
 
+def _long_trend_min_median_sales_for_region(level: str, region: str, dwelling: str) -> float:
+    base_threshold = _long_trend_min_median_sales(level)
+    normalized_level = str(level or "").strip().upper()
+    normalized_region = str(region or "").strip()
+    normalized_dwelling = str(dwelling or "").strip().upper()
+
+    if (
+        normalized_level == "REGION16"
+        and normalized_dwelling == "HOUSE"
+        and normalized_region in REGION16_SEGMENTED_REGIONS
+    ):
+        return float(REGION16_SEGMENTED_LONG_TREND_MIN_MEDIAN_SALES)
+
+    return float(base_threshold)
+
+
 def _with_conditional_underlying_trend(
     frame: pd.DataFrame,
     *,
     group_cols: list[str],
     sales_col: str = "sales_28d",
     min_median_sales: float,
+    min_median_sales_by_group: dict[object, float] | None = None,
 ) -> pd.DataFrame:
     if frame is None or frame.empty:
         return pd.DataFrame() if frame is None else frame.copy()
@@ -1352,7 +1583,20 @@ def _with_conditional_underlying_trend(
         .median()
         .reset_index(name="_median_sales_28d")
     )
-    eligible_groups = sales_median.loc[sales_median["_median_sales_28d"] >= float(min_median_sales), group_cols].copy()
+    if min_median_sales_by_group:
+        if len(group_cols) != 1:
+            raise ValueError("min_median_sales_by_group currently supports single-column grouping only.")
+        group_col = group_cols[0]
+        sales_median["_min_median_sales_required"] = (
+            sales_median[group_col].map(min_median_sales_by_group).fillna(float(min_median_sales))
+        )
+    else:
+        sales_median["_min_median_sales_required"] = float(min_median_sales)
+
+    eligible_groups = sales_median.loc[
+        sales_median["_median_sales_28d"] >= sales_median["_min_median_sales_required"],
+        group_cols,
+    ].copy()
     if eligible_groups.empty:
         return out
 
@@ -1379,6 +1623,7 @@ def _build_market_view_plot_df(
     base_sales: dict[str, float],
     stable_ratio: float,
     level: str,
+    dwelling: str,
 ) -> pd.DataFrame:
     frame = df_scope[["date", "region", "rolling_median", "sales_28d"]].rename(
         columns={"date": "event_time", "rolling_median": "value"}
@@ -1400,6 +1645,10 @@ def _build_market_view_plot_df(
         frame,
         group_cols=["region"] if level != "NSW" else [],
         min_median_sales=_long_trend_min_median_sales(level),
+        min_median_sales_by_group={
+            region: _long_trend_min_median_sales_for_region(level, region, dwelling)
+            for region in frame["region"].dropna().astype(str).unique()
+        } if level == "REGION16" and str(dwelling or "").strip().upper() == "HOUSE" else None,
     )
 
     return frame
@@ -1437,6 +1686,8 @@ def main():
     if IS_EXTERNAL_MODE:
         dwelling = _render_external_dwelling_switch(dwelling)
     level, preset, start_ts, end_ts, stable_ratio = _render_page_filter_bar(min_date, max_date)
+    _normalize_display_mode_state("mv_chart_display_mode")
+    chart_display_mode = _coerce_display_mode(st.session_state.get("mv_chart_display_mode"))
     with perf.track("level_data_load"):
         current_daily = _load_level_daily(level)
     if current_daily.is_empty():
@@ -1489,6 +1740,7 @@ def main():
                 base_sales=base_sales,
                 stable_ratio=stable_ratio,
                 level=level,
+                dwelling=dwelling,
             )
             stable_lookup = _build_market_view_stable_lookup(plot_df_all)
 
@@ -1502,7 +1754,13 @@ def main():
             if summary_visible_df.empty:
                 st.info(t("no_data"))
                 return
-            focus_metrics = _build_focus_metrics(summary_full_df, summary_visible_df)
+            focus_metrics = _build_focus_metrics(
+                plot_df_all,
+                summary_visible_df,
+                level=level,
+                dwelling=dwelling,
+                display_mode=chart_display_mode,
+            )
             plot_df = plot_df_all[(plot_df_all["event_time"] >= start_ts) & (plot_df_all["event_time"] <= end_ts)].copy()
 
         chart_card = st.container(border=True)
@@ -1532,6 +1790,22 @@ def main():
                     label_visibility="collapsed",
                 )
                 chart_display_mode = _coerce_display_mode(chart_display_mode_label)
+            anchor_points = pd.DataFrame()
+            if (
+                focus_metrics.get("latest_point") is not None
+                and not pd.isna(focus_metrics.get("latest_point"))
+                and focus_metrics.get("latest_median") is not None
+                and not pd.isna(focus_metrics.get("latest_median"))
+            ):
+                anchor_points = pd.DataFrame(
+                    [
+                        {
+                            "x": pd.to_datetime(focus_metrics["latest_point"], errors="coerce"),
+                            "y": pd.to_numeric(focus_metrics["latest_median"], errors="coerce"),
+                            "label": region_label,
+                        }
+                    ]
+                )
             chart = build_interactive_chart(
                 plot_df,
                 level=level,
@@ -1543,6 +1817,7 @@ def main():
                 stable_col="stable",
                 trend_col="underlying_trend",
                 display_mode=chart_display_mode,
+                anchor_points=anchor_points,
             )
             st.plotly_chart(chart, use_container_width=True, config={"displayModeBar": False, "responsive": True})
 

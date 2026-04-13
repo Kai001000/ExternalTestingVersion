@@ -189,6 +189,7 @@ def build_interactive_chart(
     trend_col: str | None = None,
     trend_tail_col: str = "underlying_trend_tail",
     display_mode: str = "Both",
+    anchor_points: pd.DataFrame | None = None,
 ) -> go.Figure:
     df = plot_df.copy()
 
@@ -335,6 +336,29 @@ def build_interactive_chart(
                         showlegend=stable_trend_df.empty,
                     )
                 )
+
+    if anchor_points is not None and not anchor_points.empty:
+        anchor_df = anchor_points.copy()
+        anchor_df["x"] = pd.to_datetime(anchor_df["x"], errors="coerce")
+        anchor_df["y"] = pd.to_numeric(anchor_df["y"], errors="coerce")
+        anchor_df = anchor_df[anchor_df["x"].notna() & anchor_df["y"].notna()].copy()
+        if not anchor_df.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=anchor_df["x"],
+                    y=anchor_df["y"],
+                    mode="markers",
+                    name=tr("最新锚点", "Latest anchor"),
+                    marker=dict(size=8, color="#1f2937", line=dict(color="#ffffff", width=1.5)),
+                    customdata=list(anchor_df["label"].astype(str)) if "label" in anchor_df.columns else None,
+                    hovertemplate=(
+                        f"{group_label}: %{{customdata}}<br>{time_title}: %{{x|%Y-%m-%d}}<br>{t('axis_price')}: $%{{y:,.0f}}<extra></extra>"
+                        if "label" in anchor_df.columns else
+                        f"{time_title}: %{{x|%Y-%m-%d}}<br>{t('axis_price')}: $%{{y:,.0f}}<extra></extra>"
+                    ),
+                    showlegend=False,
+                )
+            )
 
     fig.update_layout(**_base_layout(360, time_title, t("axis_price")))
     if level == "NSW":
