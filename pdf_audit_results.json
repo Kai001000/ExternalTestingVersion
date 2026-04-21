@@ -1,0 +1,156 @@
+[
+  {
+    "case_id": "2020168821",
+    "suburb": "Aberglasslyn",
+    "postcode": "2320",
+    "price_band": "1.2M-2M",
+    "listing_price_pdf": 1500000.0,
+    "suburb_listing_median_pdf": 765000.0,
+    "suburb_listing_median_manual": 765000.0,
+    "suburb_listing_median_page_summary": 765000.0,
+    "price_positioning": "\u00e9\u00ab\u02dc\u00e4\u00ba\u017d suburb \u00e6\u0152\u201a\u00e7\u2030\u0152\u00e4\u00b8\u00ad\u00e4\u00bd\u008d\u00e4\u00bb\u00b7",
+    "delta_vs_suburb": 0.9607843137254901,
+    "comparables_scope": "\u00e5\u0090\u0152 suburb / \u00e5\u0090\u0152 subtype / \u00e5\u0090\u0152\u00e6\u02c6\u00b7\u00e5\u017e\u2039",
+    "comparables_top5": [
+      {
+        "listing_id": "2020709188",
+        "address": "2/188 Denton Park Drive, Aberglasslyn NSW 2320",
+        "price_mid": 710000.0,
+        "is_selected": false
+      },
+      {
+        "listing_id": "2020168821",
+        "address": "6 Peppertree Circuit, Aberglasslyn NSW 2320",
+        "price_mid": 1500000.0,
+        "is_selected": true
+      },
+      {
+        "listing_id": "2020564274",
+        "address": "363 Aberglasslyn Road, Aberglasslyn NSW 2320",
+        "price_mid": 1650000.0,
+        "is_selected": false
+      }
+    ],
+    "sold_context_level": "POSTCODE",
+    "sold_context_region": "2320",
+    "sold_pdf": {
+      "latest_median": 837675.3731343284,
+      "latest_point": "2026-03-12 00:00:00",
+      "stable_yoy": 0.10662670489864445,
+      "sales": 41.0
+    },
+    "sold_marketview_long": {
+      "latest_stable_date": "2026-03-12 00:00:00",
+      "latest_stable_median": 837675.3731343284,
+      "latest_stable_sales": "41",
+      "prior_year_date": "2025-03-12 00:00:00",
+      "prior_year_median": 756962.9120879121,
+      "stable_yoy": 0.10662670489864445,
+      "latest_stable_raw_value": 822000.0,
+      "prior_year_raw_value": 725000.0,
+      "series_name": "underlying_trend",
+      "transformed": true
+    },
+    "band_pdf": {
+      "label": "1.2M-2M",
+      "latest_value": 1425000.0,
+      "stable_yoy": -0.03716216216216217,
+      "anchor_date": "2026-03-02 00:00:00",
+      "sales_28d": 7090.0,
+      "trend_label": "\u8d70\u5f31"
+    },
+    "band_marketview": {
+      "band": "1.2M-2M",
+      "median": 1425000.0,
+      "yoy": -0.03716216216216217,
+      "anchor_date": "2026-03-02 00:00:00"
+    },
+    "rent_pdf": {
+      "median_weekly_rent": 570.0,
+      "active_rental_count": 4,
+      "priced_rental_count": 4,
+      "activity_label": "\u00e7\u00a7\u0178\u00e8\u00b5\u0081\u00e6\u00b4\u00bb\u00e5\u0160\u00a8\u00e5\u0081\u008f\u00e8\u2013\u201e"
+    },
+    "estimated_gross_yield": 0.01976
+  },
+  {
+    "case_id": "2020387973",
+    "suburb": "Adamstown",
+    "postcode": "2289",
+    "price_band": "2M-3M",
+    "listing_price_pdf": 2090000.0,
+    "suburb_listing_median_pdf": 1165000.0,
+    "suburb_listing_median_manual": 1165000.0,
+    "suburb_listing_median_page_summary": 1165000.0,
+    "price_positioning": "\u00e9\u00ab\u02dc\u00e4\u00ba\u017d suburb \u00e6\u0152\u201a\u00e7\u2030\u0152\u00e4\u00b8\u00ad\u00e4\u00bd\u008d\u00e4\u00bb\u00b7",
+    "delta_vs_suburb": 0.7939914163090129,
+    "comparables_scope": "\u00e5\u0090\u0152 suburb / \u00e5\u0090\u0152 subtype / \u00e5\u0090\u0152\u00e6\u02c6\u00b7\u00e5\u017e\u2039",
+    "comparables_top5": [
+      {
+        "listing_id": "2020694692",
+        "address": "29 Eighth Street, Adamstown NSW 2289",
+        "price_mid": 1675000.0,
+        "is_selected": false
+      },
+      {
+        "listing_id": "2020690710",
+        "address": "14 Costata Crescent, Adamstown NSW 2289",
+        "price_mid": 1725000.0,
+        "is_selected": false
+      },
+      {
+        "listing_id": "2020593792",
+        "address": "133 Lockyer St, Adamstown NSW 2289",
+        "price_mid": 2090000.0,
+        "is_selected": false
+      },
+      {
+        "listing_id": "2020387973",
+        "address": "133 Lockyer Street, Adamstown NSW 2289",
+        "price_mid": 2090000.0,
+        "is_selected": true
+      }
+    ],
+    "sold_context_level": "POSTCODE",
+    "sold_context_region": "2289",
+    "sold_pdf": {
+      "latest_median": 1269698.0925925926,
+      "latest_point": "2026-03-11 00:00:00",
+      "stable_yoy": 0.2342302485116008,
+      "sales": 16.0
+    },
+    "sold_marketview_long": {
+      "latest_stable_date": "2026-03-11 00:00:00",
+      "latest_stable_median": 1269698.0925925926,
+      "latest_stable_sales": "16",
+      "prior_year_date": "2025-03-11 00:00:00",
+      "prior_year_median": 1028736.8131868131,
+      "stable_yoy": 0.2342302485116008,
+      "latest_stable_raw_value": 1305000.0,
+      "prior_year_raw_value": 980000.0,
+      "series_name": "underlying_trend",
+      "transformed": true
+    },
+    "band_pdf": {
+      "label": "2M-3M",
+      "latest_value": 2378000.0,
+      "stable_yoy": -0.005020920502092019,
+      "anchor_date": "2025-12-29 00:00:00",
+      "sales_28d": 3035.0,
+      "trend_label": "\u5e73\u7a33"
+    },
+    "band_marketview": {
+      "band": "2M-3M",
+      "median": 2378000.0,
+      "yoy": -0.005020920502092019,
+      "anchor_date": "2025-12-29 00:00:00"
+    },
+    "rent_pdf": {
+      "median_weekly_rent": 650.0,
+      "active_rental_count": 17,
+      "priced_rental_count": 17,
+      "activity_label": "\u00e7\u00a7\u0178\u00e8\u00b5\u0081\u00e6\u00b4\u00bb\u00e5\u0160\u00a8\u00e4\u00b8\u00ad\u00e7\u00ad\u2030"
+    },
+    "estimated_gross_yield": 0.01617224880382775
+  }
+]

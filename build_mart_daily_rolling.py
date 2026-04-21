@@ -14,6 +14,30 @@ DIM_REGION16_PATH = DIM_DIR / "dim_region16_mapping.csv"
 PRICE_MAX = 100_000_000
 PRICE_MIN_EXCLUSIVE = 0
 ALLOWED_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
+# Legacy internal token = REGION16.
+# Canonical product-facing name = Market Region.
+REGION16_SEGMENT_DEFINITIONS = (
+    {
+        "base_region": "Lower North Shore",
+        "segment_region": "Lower North Shore \u2014 Core",
+        "postcodes": ("2060", "2061", "2088", "2089", "2090"),
+    },
+    {
+        "base_region": "Lower North Shore",
+        "segment_region": "Lower North Shore \u2014 Extended",
+        "postcodes": ("2067",),
+    },
+    {
+        "base_region": "Upper North Shore",
+        "segment_region": "Upper North Shore \u2014 Core",
+        "postcodes": ("2070", "2071", "2072", "2074"),
+    },
+    {
+        "base_region": "Upper North Shore",
+        "segment_region": "Upper North Shore \u2014 Extended",
+        "postcodes": ("2077",),
+    },
+)
 
 
 def _make_suburb_key_expr(col_name: str) -> pl.Expr:
@@ -131,11 +155,41 @@ def _load_dim_region16() -> pl.DataFrame:
     )
     if dup_postcodes.height > 0:
         raise ValueError(
-            "[CONFLICT] Same postcode maps to multiple REGION16 rows.\n"
+            "[CONFLICT] Same postcode maps to multiple Market Region rows.\n"
             f"{dup_postcodes}"
         )
 
     return dim
+
+
+def _expand_region16_segments(df: pl.DataFrame) -> pl.DataFrame:
+    if df.is_empty():
+        return df
+
+    required_cols = {"postcode", "region_name", "dwelling_group", "date", "purchase_price"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"REGION16 segment expansion missing required columns: {sorted(missing)} | "
+            f"available={df.columns}"
+        )
+
+    segment_frames: list[pl.DataFrame] = []
+    for definition in REGION16_SEGMENT_DEFINITIONS:
+        segment_df = df.filter(
+            (pl.col("region_name") == definition["base_region"])
+            & pl.col("postcode").is_in(definition["postcodes"])
+        )
+        if segment_df.height == 0:
+            continue
+        segment_frames.append(
+            segment_df.with_columns(pl.lit(definition["segment_region"]).alias("region_name"))
+        )
+
+    if not segment_frames:
+        return df
+
+    return pl.concat([df, *segment_frames], how="vertical")
 
 
 def _build_level(
@@ -156,8 +210,10 @@ def _build_level(
     elif level == "REGION16":
         if dim_region16 is None or dim_region16.is_empty():
             return pl.DataFrame()
-        # REGION16 is postcode-based by design
+        # Legacy internal token = REGION16; canonical product-facing layer = Market Region.
+        # Market Region remains postcode-based in the current architecture.
         df = fact.join(dim_region16, on="postcode", how="inner")
+        df = _expand_region16_segments(df)
         df = df.with_columns(pl.col("region_name").alias("region"))
 
     elif level == "SUBURB":
@@ -225,11 +281,11 @@ def main():
     print(f"Dim GCCSA loaded: {dim_gccsa.height:,} rows")
 
     dim_region16 = _load_dim_region16()
-    print(f"Dim REGION16 loaded: {dim_region16.height:,} rows")
+    print(f"Dim Market Region loaded via legacy REGION16 path: {dim_region16.height:,} rows")
 
     if not dim_region16.is_empty():
         matched = fact.join(dim_region16, on="postcode", how="inner").height
-        print(f"REGION16 matched fact rows (postcode-based): {matched:,}")
+        print(f"Market Region matched fact rows (postcode-based): {matched:,}")
 
     levels = ["NSW", "REGION", "REGION16", "SUBURB", "POSTCODE"]
 

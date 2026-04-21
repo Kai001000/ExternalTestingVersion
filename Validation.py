@@ -6,7 +6,7 @@ import pandas as pd
 
 BASE_DIR = Path(r"C:\Users\jonat\PycharmProjects\NSWpropertyData")
 DIM_DIR = BASE_DIR / "Processed" / "dim"
-OUT_DIR = DIM_DIR / "validation_region16"
+OUT_DIR = DIM_DIR / "validation_market_region"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 REGION16_PATH = DIM_DIR / "dim_region16_mapping.csv"
@@ -130,9 +130,9 @@ def _load_suburb_postcode_dim(path: Path) -> pd.DataFrame:
 
 
 def main():
-    print("Loading region16 mapping...")
+    print("Loading Market Region mapping...")
     region16 = _load_region16(REGION16_PATH)
-    print(f"region16 rows: {len(region16):,}")
+    print(f"Market Region rows: {len(region16):,}")
 
     print("Loading suburb-postcode dimension...")
     dim_sp = _load_suburb_postcode_dim(SUBURB_POSTCODE_DIM_PATH)
@@ -157,14 +157,14 @@ def main():
     ]].sort_values(["region_id", "postcode", "suburb_key"])
 
     exact_out.to_csv(
-        OUT_DIR / "validation_region16_included_suburbs_exact.csv",
+        OUT_DIR / "validation_market_region_included_suburbs_exact.csv",
         index=False,
         encoding="utf-8"
     )
 
     unmatched_exact = exact_out[~exact_out["matched_exact"]].copy()
     unmatched_exact.to_csv(
-        OUT_DIR / "validation_region16_exact_unmatched_rows.csv",
+        OUT_DIR / "validation_market_region_exact_unmatched_rows.csv",
         index=False,
         encoding="utf-8"
     )
@@ -181,7 +181,7 @@ def main():
 
     postcode_only = postcode_only.sort_values(["region_id", "postcode", "suburb_key"]).reset_index(drop=True)
     postcode_only.to_csv(
-        OUT_DIR / "validation_region16_included_suburbs_postcode_only.csv",
+        OUT_DIR / "validation_market_region_included_suburbs_postcode_only.csv",
         index=False,
         encoding="utf-8"
     )
@@ -212,14 +212,14 @@ def main():
     ]].sort_values(["region_id", "postcode", "suburb_key"])
 
     postcode_expansion.to_csv(
-        OUT_DIR / "validation_region16_postcode_expansion.csv",
+        OUT_DIR / "validation_market_region_postcode_expansion.csv",
         index=False,
         encoding="utf-8"
     )
 
     extra_rows = postcode_expansion[postcode_expansion["would_be_extra_if_postcode_only"]].copy()
     extra_rows.to_csv(
-        OUT_DIR / "validation_region16_postcode_only_extra_rows.csv",
+        OUT_DIR / "validation_market_region_postcode_only_extra_rows.csv",
         index=False,
         encoding="utf-8"
     )
@@ -252,7 +252,7 @@ def main():
 
     summary = summary.sort_values(["region_id", "region_name"])
     summary.to_csv(
-        OUT_DIR / "validation_region16_summary.csv",
+        OUT_DIR / "validation_market_region_summary.csv",
         index=False,
         encoding="utf-8"
     )

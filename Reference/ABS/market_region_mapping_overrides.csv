@@ -1,0 +1,4 @@
+region_id,region_key,region_name,suburb_input,suburb_key,suburb_official_sal_2021,postcode,state,mmm_2023,postcode_in_uploaded_POA_2021,match_note,source_dataset,source_url
+17,forest_district,Forest District,Belrose,belrose,Belrose,2085,NSW,1,True,Conservative v1 Market Region core postcode definition,Market Region override supplement,internal supplement
+17,forest_district,Forest District,Frenchs Forest,frenchs_forest,Frenchs Forest,2086,NSW,1,True,Conservative v1 Market Region core postcode definition,Market Region override supplement,internal supplement
+17,forest_district,Forest District,Forestville,forestville,Forestville,2087,NSW,1,True,Conservative v1 Market Region core postcode definition,Market Region override supplement,internal supplement

@@ -30,6 +30,30 @@ ADAPTIVE_LOWER_MULTIPLIER = 0.7
 ADAPTIVE_UPPER_MULTIPLIER = 1.5
 ADAPTIVE_MIN_HISTORY_ROWS = 50
 ALLOWED_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
+# Legacy internal token = REGION16.
+# Canonical product-facing name = Market Region.
+REGION16_SEGMENT_DEFINITIONS = (
+    {
+        "base_region": "Lower North Shore",
+        "segment_region": "Lower North Shore \u2014 Core",
+        "postcodes": ("2060", "2061", "2088", "2089", "2090"),
+    },
+    {
+        "base_region": "Lower North Shore",
+        "segment_region": "Lower North Shore \u2014 Extended",
+        "postcodes": ("2067",),
+    },
+    {
+        "base_region": "Upper North Shore",
+        "segment_region": "Upper North Shore \u2014 Core",
+        "postcodes": ("2070", "2071", "2072", "2074"),
+    },
+    {
+        "base_region": "Upper North Shore",
+        "segment_region": "Upper North Shore \u2014 Extended",
+        "postcodes": ("2077",),
+    },
+)
 EXTERNAL_SALE_DISPLAY_MIN_PRICE = 50_000
 EXTERNAL_SALE_DISPLAY_MAX_PRICE = 10_000_000
 EXTERNAL_RENT_DISPLAY_MIN_WEEKLY = 80
@@ -1036,7 +1060,7 @@ def _normalize_level(level: str) -> str:
         return "NSW"
     if s_low == "region":
         return "REGION"
-    if s_low == "region16":
+    if s_low in {"region16", "market_region", "market region"}:
         return "REGION16"
     if s_low == "suburb":
         return "SUBURB"
@@ -1045,7 +1069,7 @@ def _normalize_level(level: str) -> str:
 
     if s_low.startswith("nsw"):
         return "NSW"
-    if s_low.startswith("region16"):
+    if s_low.startswith("region16") or s_low.startswith("market_region") or s_low.startswith("market region"):
         return "REGION16"
     if s_low.startswith("region"):
         return "REGION"
@@ -1158,6 +1182,36 @@ def normalize_region_values(df: pd.DataFrame, level: str) -> pd.DataFrame:
     else:
         d["region"] = _clean_region_series(d["region"])
     return d
+
+
+def _expand_region16_segments_daily(df: pl.DataFrame) -> pl.DataFrame:
+    if df.is_empty():
+        return df
+
+    required_cols = {"postcode", "region_name", "dwelling_group", "date", "purchase_price"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"REGION16 daily expansion missing required columns: {sorted(missing)}; "
+            f"available columns: {df.columns}"
+        )
+
+    segment_frames: list[pl.DataFrame] = []
+    for definition in REGION16_SEGMENT_DEFINITIONS:
+        segment_df = df.filter(
+            (pl.col("region_name") == definition["base_region"])
+            & pl.col("postcode").is_in(definition["postcodes"])
+        )
+        if segment_df.is_empty():
+            continue
+        segment_frames.append(
+            segment_df.with_columns(pl.lit(definition["segment_region"]).alias("region_name"))
+        )
+
+    if not segment_frames:
+        return df
+
+    return pl.concat([df, *segment_frames], how="vertical")
 
 
 @st.cache_data(show_spinner=False)
@@ -1320,14 +1374,13 @@ def _build_filtered_daily_rolling(level: str) -> pl.DataFrame:
         dim_region16 = load_dim_region16()
         if dim_region16.is_empty():
             return pl.DataFrame()
-        scoped = (
-            fact.join(
-                dim_region16.select(["postcode", "region_name"]).unique(subset=["postcode"]),
-                on="postcode",
-                how="inner",
-            )
-            .with_columns(pl.col("region_name").alias("region"))
+        scoped = fact.join(
+            dim_region16.select(["postcode", "region_name"]).unique(subset=["postcode"]),
+            on="postcode",
+            how="inner",
         )
+        scoped = _expand_region16_segments_daily(scoped)
+        scoped = scoped.with_columns(pl.col("region_name").alias("region"))
     elif level == "SUBURB":
         scoped = fact.with_columns(pl.col("suburb").alias("region")).filter(pl.col("suburb") != "")
     elif level == "POSTCODE":
@@ -1404,6 +1457,14 @@ def load_dim_region16() -> pl.DataFrame:
     df = df.with_columns([
         pl.col("region_key").cast(pl.Utf8).str.strip_chars(),
         pl.col("region_name").cast(pl.Utf8).str.strip_chars(),
+        pl.when(pl.col("suburb").is_not_null())
+          .then(pl.col("suburb").cast(pl.Utf8).str.strip_chars())
+          .otherwise(pl.lit(None, dtype=pl.Utf8))
+          .alias("suburb"),
+        pl.when(pl.col("suburb_key").is_not_null())
+          .then(pl.col("suburb_key").cast(pl.Utf8).str.strip_chars().str.to_lowercase())
+          .otherwise(pl.lit(None, dtype=pl.Utf8))
+          .alias("suburb_key"),
         pl.col("postcode").cast(pl.Utf8).str.strip_chars().str.replace(r"\.0$", "").str.zfill(4),
         pl.when(pl.col("source_suburbs").is_not_null())
           .then(pl.col("source_suburbs").cast(pl.Utf8).str.strip_chars())
@@ -1411,7 +1472,19 @@ def load_dim_region16() -> pl.DataFrame:
           .alias("source_suburbs"),
     ])
 
-    keep_cols = [c for c in ["region_id", "region_key", "region_name", "postcode", "source_suburbs"] if c in df.columns]
+    keep_cols = [
+        c
+        for c in [
+            "region_id",
+            "region_key",
+            "region_name",
+            "suburb",
+            "suburb_key",
+            "postcode",
+            "source_suburbs",
+        ]
+        if c in df.columns
+    ]
     df = df.select(keep_cols).unique()
 
     df = df.filter(
@@ -1421,7 +1494,9 @@ def load_dim_region16() -> pl.DataFrame:
     )
 
     dup_postcodes = (
-        df.group_by("postcode")
+        df.select(["postcode", "region_key"])
+          .unique()
+          .group_by("postcode")
           .agg(pl.len().alias("n"))
           .filter(pl.col("n") > 1)
     )

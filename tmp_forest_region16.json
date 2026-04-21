@@ -1,0 +1,48 @@
+{
+  "suburb_postcodes": {
+    "suburb": [
+      "BELROSE",
+      "DAVIDSON",
+      "FORESTVILLE",
+      "FRENCHS FOREST",
+      "KILLARNEY HEIGHTS"
+    ],
+    "postcode": [
+      "2085",
+      "2085",
+      "2087",
+      "2086",
+      "2087"
+    ]
+  },
+  "joined_region16": {
+    "suburb": [
+      "BELROSE",
+      "DAVIDSON",
+      "FORESTVILLE",
+      "FRENCHS FOREST",
+      "KILLARNEY HEIGHTS"
+    ],
+    "postcode": [
+      "2085",
+      "2085",
+      "2087",
+      "2086",
+      "2087"
+    ],
+    "region_name": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "region_key": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  }
+}

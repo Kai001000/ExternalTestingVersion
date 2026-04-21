@@ -8,7 +8,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils.config import IS_EXTERNAL_MODE
+from utils.config import IS_PUBLIC_MODE
 from utils.data import (
     apply_external_rent_listing_display_filter,
     build_suburb_centroid_lookup,
@@ -28,7 +28,13 @@ from utils.ui import inject_app_theme, render_external_page_header, sidebar_comm
 
 SUBURB_JOIN_ALIASES = {"CESSNOCK WEST": "CESSNOCK", "PATONGA BEACH": "PATONGA"}
 RENT_BUDGET_STEP = 25
-MAP_HEIGHT = 640
+EXTERNAL_MAP_PANEL_HEIGHT = 760
+MAP_HEIGHT = 712
+EXTERNAL_PANEL_BODY_HEIGHT = EXTERNAL_MAP_PANEL_HEIGHT
+EXTERNAL_PAGE_SIZE = 4
+EXTERNAL_MAX_PAGES = 5
+EXTERNAL_RANKING_PAGE_SIZE = 8
+EXTERNAL_SAME_SUBURB_PAGE_SIZE = 3
 EXTERNAL_MAX_WEEKLY_RENT = 100_000
 RENT_SORT_SPECS = {
     "rent_asc": ("rent_mid", True),
@@ -55,6 +61,166 @@ st.markdown(
     .budget-list-meta { color: #6b7280; font-size: 0.82rem; line-height: 1.4; }
     .budget-list-price { font-size: 1.05rem; font-weight: 800; color: #0f172a; text-align: right; white-space: nowrap; }
     .budget-list-subprice { color: #6b7280; font-size: 0.78rem; text-align: right; }
+    .budget-panel-summary {
+        border: 1px solid rgba(148, 163, 184, 0.20);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94));
+        padding: 0.9rem 1rem;
+        margin-bottom: 0.85rem;
+    }
+    .budget-panel-eyebrow {
+        color: #8c5e3c;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 0.2rem;
+    }
+    .budget-panel-title {
+        color: #111827;
+        font-size: 1.02rem;
+        font-weight: 800;
+        margin-bottom: 0.22rem;
+        line-height: 1.3;
+    }
+    .budget-panel-subtitle {
+        color: #6b7280;
+        font-size: 0.82rem;
+        line-height: 1.4;
+    }
+    .budget-panel-badge {
+        display: inline-block;
+        border-radius: 999px;
+        background: #182230;
+        color: #f8fafc;
+        padding: 0.16rem 0.52rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        margin-left: 0.35rem;
+    }
+    .budget-card {
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.95));
+        padding: 0.9rem 0.95rem;
+        margin-bottom: 0.8rem;
+    }
+    .budget-card-price {
+        color: #0f172a;
+        font-size: 1.08rem;
+        font-weight: 800;
+        margin-bottom: 0.2rem;
+    }
+    .budget-card-address {
+        color: #111827;
+        font-size: 0.96rem;
+        font-weight: 700;
+        line-height: 1.35;
+        margin-bottom: 0.2rem;
+    }
+    .budget-card-meta {
+        color: #6b7280;
+        font-size: 0.81rem;
+        line-height: 1.45;
+    }
+    .budget-fact-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.55rem;
+        margin: 0.85rem 0 0.65rem 0;
+    }
+    .budget-fact {
+        border-radius: 12px;
+        background: rgba(248, 250, 252, 0.96);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        padding: 0.55rem 0.65rem;
+    }
+    .budget-fact-label {
+        color: #6b7280;
+        font-size: 0.72rem;
+        margin-bottom: 0.14rem;
+    }
+    .budget-fact-value {
+        color: #111827;
+        font-size: 0.84rem;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+    .budget-panel-footer {
+        border-top: 1px solid rgba(148, 163, 184, 0.18);
+        margin-top: 0.65rem;
+        padding-top: 0.7rem;
+    }
+    .budget-mini-card {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 14px;
+        background: rgba(255,255,255,0.96);
+        padding: 0.7rem 0.78rem;
+        margin-bottom: 0.6rem;
+    }
+    .budget-mini-price {
+        color: #0f172a;
+        font-size: 0.92rem;
+        font-weight: 800;
+        margin-bottom: 0.12rem;
+    }
+    .budget-mini-address {
+        color: #111827;
+        font-size: 0.82rem;
+        font-weight: 700;
+        line-height: 1.35;
+        margin-bottom: 0.12rem;
+    }
+    .budget-mini-meta {
+        color: #6b7280;
+        font-size: 0.76rem;
+        line-height: 1.35;
+    }
+    .budget-table-head {
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #6b7280;
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+        margin-bottom: 0.3rem;
+    }
+    .budget-table-row {
+        padding: 0.28rem 0;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        min-height: 2.45rem;
+        display: flex;
+        align-items: center;
+    }
+    .budget-table-cell {
+        font-size: 0.88rem;
+        color: #1f2937;
+        line-height: 1.25;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .budget-table-price {
+        font-size: 0.92rem;
+        font-weight: 800;
+        color: #0f172a;
+        white-space: nowrap;
+    }
+    .budget-table-address a {
+        color: #0f172a;
+        text-decoration: none;
+        font-weight: 700;
+    }
+    .budget-table-address a:hover {
+        text-decoration: underline;
+    }
+    .budget-table-muted {
+        color: #6b7280;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
     @media (max-width: 900px) {
         div[data-testid="column"] {
             min-width: 100% !important;
@@ -149,18 +315,12 @@ def _title_case_subtype(value):
 
 
 def _normalise_weekly_bounds(df):
-    source_df = apply_external_rent_listing_display_filter(df) if IS_EXTERNAL_MODE else df
+    source_df = apply_external_rent_listing_display_filter(df)
     if source_df.empty:
         source_df = df
     rent_min = pd.to_numeric(source_df["rent_filter_min"], errors="coerce")
     rent_max = pd.to_numeric(source_df["rent_filter_max"], errors="coerce")
-    if IS_EXTERNAL_MODE:
-        return 75, 5_000
-    if rent_min.notna().any() and rent_max.notna().any():
-        lower = max(0, int(math.floor(rent_min.min() / RENT_BUDGET_STEP) * RENT_BUDGET_STEP))
-        upper = int(math.ceil(rent_max.max() / RENT_BUDGET_STEP) * RENT_BUDGET_STEP)
-        return lower, max(upper, lower + RENT_BUDGET_STEP)
-    return 0, 3000
+    return 75, 5_000
 
 
 def _property_group_options(df):
@@ -172,6 +332,10 @@ def _property_group_options(df):
 def _subtype_counts(df, group):
     subset = df.loc[df["property_group"] == group, "property_subtype"].fillna("unknown")
     return subset.value_counts().sort_values(ascending=False)
+
+
+def _category_option_label(label, count):
+    return label if IS_PUBLIC_MODE else f"{label} ({int(count):,})"
 
 
 def _filter_external_extreme_rents(df: pd.DataFrame) -> pd.DataFrame:
@@ -212,12 +376,17 @@ def _init_state():
     st.session_state.setdefault("rent_shortlist_ids", [])
     st.session_state.setdefault("rent_shortlist_items", {})
     st.session_state.setdefault("rent_selected_suburb", "__ALL__")
+    st.session_state.setdefault("rent_selected_listing_id", None)
     st.session_state.setdefault("rent_map_focus_token", None)
     st.session_state.setdefault("rent_map_view", {"center": None, "zoom": None})
     st.session_state.setdefault("rent_focus_notice", None)
     st.session_state.setdefault("rent_commute_notice", None)
     st.session_state.setdefault("rent_group_notice", None)
     st.session_state.setdefault("rent_external_search_triggered", False)
+    st.session_state.setdefault("rent_listing_page", 0)
+    st.session_state.setdefault("rent_ranking_page", 0)
+    st.session_state.setdefault("rent_same_suburb_page", 0)
+    st.session_state.setdefault("rent_browser_scope_mode", "filtered")
 
 
 def _consume_focus_notice(key):
@@ -319,18 +488,111 @@ def _selected_suburb():
     return st.session_state["rent_selected_suburb"]
 
 
+def _selected_listing_id():
+    value = st.session_state.get("rent_selected_listing_id")
+    if value in (None, ""):
+        return None
+    return str(value)
+
+
+def _browser_scope_mode():
+    mode = str(st.session_state.get("rent_browser_scope_mode", "filtered"))
+    return mode if mode in {"filtered", "focused_filtered", "focused_all"} else "filtered"
+
+
+def _clear_selected_listing():
+    st.session_state["rent_selected_listing_id"] = None
+
+
+def _reset_listing_page():
+    st.session_state["rent_listing_page"] = 0
+
+
+def _reset_ranking_page():
+    st.session_state["rent_ranking_page"] = 0
+
+
+def _reset_same_suburb_page():
+    st.session_state["rent_same_suburb_page"] = 0
+
+
+def _set_selected_listing_id(listing_id):
+    if listing_id in (None, ""):
+        _clear_selected_listing()
+        _reset_same_suburb_page()
+        return
+    st.session_state["rent_selected_listing_id"] = str(listing_id)
+    _reset_same_suburb_page()
+
+
 def _set_selected_suburb(suburb):
+    if st.session_state.get("rent_selected_suburb", "__ALL__") != suburb:
+        _clear_selected_listing()
+        _reset_listing_page()
+        _reset_same_suburb_page()
     st.session_state["rent_selected_suburb"] = suburb
+    st.session_state["rent_browser_scope_mode"] = "filtered" if suburb == "__ALL__" else "focused_filtered"
+
+
+def _set_browser_scope_mode(mode):
+    normalized = mode if mode in {"filtered", "focused_filtered", "focused_all"} else "filtered"
+    if st.session_state.get("rent_browser_scope_mode", "filtered") != normalized:
+        _reset_listing_page()
+    st.session_state["rent_browser_scope_mode"] = normalized
+
+
+def _set_panel_listing_callback(listing_id, suburb):
+    if suburb:
+        _set_selected_suburb(suburb)
+    _set_selected_listing_id(listing_id)
+
+
+def _set_selected_listing_callback(listing_id):
+    _set_selected_listing_id(listing_id)
+
+
+def _shift_rent_listing_page(delta, total_pages):
+    current = int(st.session_state.get("rent_listing_page", 0))
+    st.session_state["rent_listing_page"] = max(0, min(max(total_pages - 1, 0), current + delta))
+
+
+def _shift_rent_ranking_page(delta, total_pages):
+    current = int(st.session_state.get("rent_ranking_page", 0))
+    st.session_state["rent_ranking_page"] = max(0, min(max(total_pages - 1, 0), current + delta))
+
+
+def _shift_rent_same_suburb_page(delta, total_pages):
+    current = int(st.session_state.get("rent_same_suburb_page", 0))
+    st.session_state["rent_same_suburb_page"] = max(0, min(max(total_pages - 1, 0), current + delta))
+
+
+def _handle_view_all_in_focused_suburb():
+    _set_browser_scope_mode("focused_all")
+
+
+def _handle_adjust_filters():
+    _clear_suburb_focus()
+    _set_browser_scope_mode("filtered")
 
 
 def _clear_suburb_focus():
     _set_selected_suburb("__ALL__")
+    _clear_selected_listing()
+    _reset_listing_page()
+    _reset_same_suburb_page()
     st.session_state["rent_focus_notice"] = None
 
 
 def _reset_ranking_filters():
+    st.session_state["rent_pending_ranking_reset"] = True
+
+
+def _apply_pending_ranking_filter_reset():
+    if not st.session_state.pop("rent_pending_ranking_reset", False):
+        return
     st.session_state["rent_ranking_search"] = ""
-    st.session_state["rent_ranking_min_listings"] = 1 if IS_EXTERNAL_MODE else 3
+    st.session_state["rent_ranking_min_listings"] = 1
+    _reset_ranking_page()
 
 
 def _set_map_view(center, zoom):
@@ -736,19 +998,13 @@ def _render_suburb_ranking(summary):
         st.info(tr("当前筛选条件下没有可选 suburb。", "No suburbs are available under the current filters."))
         return
     focused_suburb = _selected_suburb()
-    total_available = len(summary)
-    controls = st.columns([1.7, 1.0, 1.0] if IS_EXTERNAL_MODE else [1.35, 0.85, 0.9, 0.9])
+    total_available = len(summary.loc[summary["listing_count"] > 0].copy())
+    controls = st.columns([1.9, 1.0, 1.0])
     with controls[0]:
         search_value = st.text_input(tr("Search suburb", "Search suburb"), key="rent_ranking_search", placeholder=tr("Type part of a suburb name", "Type part of a suburb name")).strip()
-    if not IS_EXTERNAL_MODE:
-        with controls[1]:
-            min_listings = int(st.number_input(tr("Min listings", "Min listings"), min_value=1, max_value=500, value=int(st.session_state.get("rent_ranking_min_listings", 3)), step=1, key="rent_ranking_min_listings"))
-        reset_col = controls[2]
-        focus_col = controls[3]
-    else:
-        min_listings = int(st.session_state.get("rent_ranking_min_listings", 1))
-        reset_col = controls[1]
-        focus_col = controls[2]
+    min_listings = int(st.session_state.get("rent_ranking_min_listings", 1))
+    reset_col = controls[1]
+    focus_col = controls[2]
     with reset_col:
         if st.button(tr("Reset ranking filters", "Reset ranking filters"), use_container_width=True):
             _reset_ranking_filters()
@@ -758,38 +1014,65 @@ def _render_suburb_ranking(summary):
             _clear_suburb_focus()
             st.rerun()
     ranking = summary.copy()
+    ranking = ranking.loc[ranking["listing_count"] > 0].copy()
     if search_value:
         ranking = ranking.loc[ranking["suburb"].astype(str).str.contains(search_value, case=False, na=False)].copy()
-    if focused_suburb != "__ALL__":
-        ranking = ranking.loc[ranking["suburb"] == focused_suburb].copy()
-    if focused_suburb == "__ALL__" and not IS_EXTERNAL_MODE:
-        ranking = ranking.loc[ranking["priced_listings_count"] >= min_listings].copy()
+    ranking = ranking.loc[ranking["priced_listings_count"] >= min_listings].copy()
+    ranking = ranking.sort_values(
+        ["coverage_ratio", "within_budget_count", "total_priced_listings", "median_weekly_rent", "suburb"],
+        ascending=[False, False, False, True, True],
+        na_position="last",
+    ).reset_index(drop=True)
     ranking = ranking.reset_index(drop=True)
-    shown_count = len(ranking) if IS_EXTERNAL_MODE else min(len(ranking), 50)
+    shown_count = len(ranking)
     st.caption(tr(f"显示 {shown_count:,} / {total_available:,} 个 suburb", f"Showing {shown_count:,} of {total_available:,} suburbs"))
+    st.caption(
+        tr(
+            f"当前聚焦 suburb: {focused_suburb if focused_suburb != '__ALL__' else '无'}",
+            f"Focused suburb: {focused_suburb if focused_suburb != '__ALL__' else 'None'}",
+        )
+    )
     if ranking.empty:
         st.warning(tr(f"排名筛选后 0 / {total_available:,} 个 suburb 可显示。", f"Showing 0 of {total_available:,} suburbs after ranking filters."))
         return
-    view = ranking.copy() if IS_EXTERNAL_MODE else ranking.head(50).copy()
+    total_pages = max(1, math.ceil(len(ranking) / EXTERNAL_RANKING_PAGE_SIZE))
+    current_page = min(int(st.session_state.get("rent_ranking_page", 0)), total_pages - 1)
+    st.session_state["rent_ranking_page"] = current_page
+    start = current_page * EXTERNAL_RANKING_PAGE_SIZE
+    end = start + EXTERNAL_RANKING_PAGE_SIZE
+    view = ranking.iloc[start:end].copy()
     view[tr("聚焦", "Focus")] = view["suburb"].eq(focused_suburb).map({True: tr("已聚焦", "Focused"), False: ""})
     view[tr("覆盖率 %", "Coverage %")] = (view["coverage_ratio"] * 100).round().astype(int)
     view[tr("预算内", "Within Budget")] = view["within_budget_count"].astype(int)
     view[tr("有报价", "Priced Listings")] = view["priced_listings_count"].astype(int)
     view[tr("总挂牌", "Total Listings")] = view["total_listings_count"].astype(int)
     view[tr("典型周租", "Typical Weekly Rent")] = view["median_weekly_rent"].map(_compact_weekly_rent)
-    if IS_EXTERNAL_MODE:
-        _render_external_rent_ranking_table(view, focused_suburb=focused_suburb, key_prefix="rent_ranking")
-        return
-    selection = st.dataframe(view[[tr("聚焦", "Focus"), "suburb", tr("覆盖率 %", "Coverage %"), tr("预算内", "Within Budget"), tr("有报价", "Priced Listings"), tr("总挂牌", "Total Listings"), tr("典型周租", "Typical Weekly Rent")]].rename(columns={"suburb": tr("Suburb", "Suburb")}), use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", key="rent_ranking_table")
-    picked_rows = selection.get("selection", {}).get("rows", []) if isinstance(selection, dict) else (getattr(getattr(selection, "selection", None), "rows", []) or [])
-    if picked_rows:
-        picked_suburb = str(view.iloc[picked_rows[0]]["suburb"])
-        if picked_suburb != focused_suburb:
-            _set_selected_suburb(picked_suburb)
-            st.rerun()
+    _render_external_rent_ranking_table(view, focused_suburb=focused_suburb, key_prefix="rent_ranking")
+    pager_cols = st.columns([1, 1.3, 1])
+    pager_cols[0].button(
+        tr("上一页", "Previous"),
+        key="rent_ranking_prev",
+        use_container_width=True,
+        disabled=current_page <= 0,
+        on_click=_shift_rent_ranking_page,
+        args=(-1, total_pages),
+    )
+    with pager_cols[1]:
+        st.caption(tr(f"第 {current_page + 1} / {total_pages} 页", f"Page {current_page + 1} of {total_pages}"))
+    pager_cols[2].button(
+        tr("下一页", "Next"),
+        key="rent_ranking_next",
+        use_container_width=True,
+        disabled=current_page >= total_pages - 1,
+        on_click=_shift_rent_ranking_page,
+        args=(1, total_pages),
+    )
+    return
 
 
 def _resolve_map_selection(event_state):
+    if event_state is None:
+        return None
     selection = getattr(event_state, "selection", None) if event_state is not None else None
     if selection is None and isinstance(event_state, dict):
         selection = event_state.get("selection")
@@ -800,14 +1083,21 @@ def _resolve_map_selection(event_state):
         return None
     point = points[0]
     customdata = point.get("customdata") if isinstance(point, dict) else getattr(point, "customdata", None)
-    if isinstance(customdata, (list, tuple)) and len(customdata) >= 2 and customdata[1] == "suburb":
-        suburb = str(customdata[0]).strip()
-        return suburb or None
+    if not isinstance(customdata, (list, tuple)) or len(customdata) < 2:
+        return None
+    kind = str(customdata[1]).strip()
+    suburb = str(customdata[0]).strip()
+    if kind == "suburb" and suburb:
+        return {"kind": "suburb", "suburb": suburb}
+    if kind == "listing" and len(customdata) >= 5:
+        listing_id = str(customdata[4]).strip()
+        if suburb and listing_id:
+            return {"kind": "listing", "suburb": suburb, "listing_id": listing_id}
     return None
 
 
 def _resolve_map_view(map_summary, map_df, selected_suburb):
-    boundaries = _load_suburb_boundaries() if not IS_EXTERNAL_MODE else {"geojson": None}
+    boundaries = {"geojson": None}
     center, zoom = resolve_budget_map_view(
         selected_suburb=selected_suburb,
         suburb_key=_normalise_suburb_key(selected_suburb) if selected_suburb != "__ALL__" else None,
@@ -815,28 +1105,22 @@ def _resolve_map_view(map_summary, map_df, selected_suburb):
         map_df=map_df,
         boundary_geojson=boundaries.get("geojson"),
     )
-    if IS_EXTERNAL_MODE:
-        center, zoom = clamp_to_nsw_map_view(center, zoom)
+    center, zoom = clamp_to_nsw_map_view(center, zoom)
     st.session_state["rent_map_focus_token"] = selected_suburb
     _set_map_view(center, zoom)
     return center, zoom
 
 
 def _build_map(context_df, suburb_summary, selected_suburb):
+    map_slot = st.empty()
     map_df = context_df.loc[context_df["has_coordinates"]].copy()
-    boundaries = _load_suburb_boundaries() if not IS_EXTERNAL_MODE else {
-        "available": False,
-        "path": "",
-        "geojson": None,
-        "centroids": pd.DataFrame(),
-        "polygons": pd.DataFrame(),
-    }
+    boundaries = {"geojson": None, "centroids": pd.DataFrame()}
     map_summary = suburb_summary.copy()
+    selected_listing_id = _selected_listing_id()
     if map_df.empty and map_summary.empty:
         st.info(tr("当前筛选结果没有可用坐标，地图暂时无法展示。", "No coordinates are available for the current filters."))
         return selected_suburb
     centroids = boundaries["centroids"]
-    polygons = boundaries["polygons"]
     if not centroids.empty:
         map_summary = map_summary.merge(centroids, on="geo_suburb_key", how="left")
         map_summary["map_latitude"] = map_summary["boundary_latitude"].fillna(map_summary["latitude"])
@@ -845,50 +1129,36 @@ def _build_map(context_df, suburb_summary, selected_suburb):
         map_summary["map_latitude"] = map_summary["latitude"]
         map_summary["map_longitude"] = map_summary["longitude"]
     map_summary = map_summary.loc[map_summary["map_latitude"].notna() & map_summary["map_longitude"].notna()].copy()
+    focus_points = map_df.loc[map_df["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else pd.DataFrame()
     center, zoom = _resolve_map_view(map_summary, map_df, selected_suburb)
-    if IS_EXTERNAL_MODE:
-        fig = go.Figure()
-        if not map_summary.empty:
-            fig.add_trace(go.Scattermapbox(lat=map_summary["map_latitude"], lon=map_summary["map_longitude"], mode="markers", marker=dict(size=(9 + 14 * (map_summary["listing_count"] / max(float(map_summary["listing_count"].max()), 1.0))).tolist(), color=map_summary["suburb"].eq(selected_suburb).map({True: "#0f4c81", False: "#1d6f8c"}).tolist(), opacity=0.76), customdata=list(zip(map_summary["suburb"], ["suburb"] * len(map_summary), map_summary["listing_count"])), hovertemplate="<b>%{customdata[0]}</b><br>Matching listings: %{customdata[2]:,.0f}<br>Click to focus suburb<extra></extra>", name="Suburb selector"))
-        focus_points = map_df.loc[map_df["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else pd.DataFrame()
-        sampled = False
-        if not focus_points.empty:
-            focus_points = focus_points.sort_values(by=["rent_mid", "available_date"], ascending=[True, True], na_position="last")
-            if len(focus_points) > 180:
-                focus_points = focus_points.head(180)
-                sampled = True
-            fig.add_trace(go.Scattermapbox(lat=focus_points["latitude"], lon=focus_points["longitude"], mode="markers", marker=dict(size=8, color="#0d5ea6", opacity=0.86), customdata=list(zip(focus_points["suburb"], ["listing"] * len(focus_points), focus_points["rent_display"].fillna("N/A"))), text=focus_points["address"].fillna(""), hovertemplate="<b>%{text}</b><br>Suburb: %{customdata[0]}<br>Rent: %{customdata[2]}<extra></extra>", name="Rental listings"))
-        fig.update_layout(height=MAP_HEIGHT, margin={"l": 0, "r": 0, "t": 0, "b": 0}, mapbox=dict(style="carto-positron", center=center, zoom=zoom, bounds=NSW_MAP_BOUNDS if IS_EXTERNAL_MODE else None), legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01), uirevision=f"rent-map-{selected_suburb}")
-        event_state = st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True, "scrollZoom": True}, key="rent_map_chart", on_select="rerun", selection_mode="points")
-        picked_suburb = _resolve_map_selection(event_state)
-        if picked_suburb and picked_suburb != selected_suburb:
-            _set_selected_suburb(picked_suburb)
-            st.rerun()
-        if sampled:
-            st.caption(tr("当前地图中的租盘点位仅展示前 180 条，以保持 External 页面响应速度。", "Rental markers are capped to the first 180 results in External mode to keep the page responsive."))
-        return selected_suburb
     fig = go.Figure()
-    if boundaries["available"] and boundaries["geojson"] is not None:
-        feature_ids = [str(feature["properties"].get("feature_id")) for feature in boundaries["geojson"].get("features", [])]
-        if feature_ids:
-            fig.add_trace(go.Choroplethmapbox(geojson=boundaries["geojson"], locations=feature_ids, z=[0] * len(feature_ids), featureidkey="properties.feature_id", zmin=0, zmax=1, colorscale=[[0.0, "#d9d9d9"], [1.0, "#d9d9d9"]], marker_opacity=0.10, marker_line_width=0.6, hoverinfo="skip", showscale=False))
-        choropleth_df = map_summary.merge(polygons[["feature_id", "geo_suburb_key"]], on="geo_suburb_key", how="inner").copy()
-        if not choropleth_df.empty:
-            active_ids = set(choropleth_df["feature_id"].astype(str).tolist())
-            active_geojson = {"type": "FeatureCollection", "features": [feature for feature in boundaries["geojson"]["features"] if str(feature["properties"].get("feature_id")) in active_ids]}
-            fig.add_trace(go.Choroplethmapbox(geojson=active_geojson, locations=choropleth_df["feature_id"], z=choropleth_df["coverage_ratio"].fillna(0.0).clip(0.0, 1.0), featureidkey="properties.feature_id", zmin=0, zmax=1, colorscale=[[0.0, "#eeeeee"], [0.25, "#ffe08a"], [0.50, "#a6d96a"], [0.75, "#4daf4a"], [1.0, "#1a9850"]], marker_opacity=0.72, marker_line_width=0.9, customdata=list(zip(choropleth_df["suburb"], (choropleth_df["coverage_ratio"] * 100).round(0), choropleth_df["within_budget_count"], choropleth_df["total_priced_listings"], choropleth_df["median_weekly_rent"].map(_compact_weekly_rent))), hovertemplate="<b>%{customdata[0]}</b><br>Coverage: %{customdata[1]:.0f}%<br>Within budget: %{customdata[2]:,.0f}<br>Total priced listings: %{customdata[3]:,.0f}<br>Typical weekly rent: %{customdata[4]}<extra></extra>", colorbar=dict(title="Coverage", thickness=14, x=0.99, len=0.45)))
     if not map_summary.empty:
         fig.add_trace(go.Scattermapbox(lat=map_summary["map_latitude"], lon=map_summary["map_longitude"], mode="markers", marker=dict(size=(8 + 16 * (map_summary["listing_count"] / max(float(map_summary["listing_count"].max()), 1.0))).tolist(), color=map_summary["suburb"].eq(selected_suburb).map({True: "#0f4c81", False: "#1d6f8c"}).tolist(), opacity=0.72), customdata=list(zip(map_summary["suburb"], ["suburb"] * len(map_summary), map_summary["listing_count"])), hovertemplate="<b>%{customdata[0]}</b><br>Matching listings: %{customdata[2]:,.0f}<br>Click to focus suburb<extra></extra>", name="Suburb selector"))
-    focus_points = map_df.loc[map_df["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else pd.DataFrame()
     if not focus_points.empty:
-        focus_points = focus_points.sort_values(by=["rent_mid", "available_date"], ascending=[True, True], na_position="last").head(350)
-        fig.add_trace(go.Scattermapbox(lat=focus_points["latitude"], lon=focus_points["longitude"], mode="markers", marker=dict(size=9, color="#0d5ea6", opacity=0.88), customdata=list(zip(focus_points["suburb"], ["listing"] * len(focus_points), focus_points["rent_display"].fillna("N/A"))), text=focus_points["address"].fillna(""), hovertemplate="<b>%{text}</b><br>Suburb: %{customdata[0]}<br>Rent: %{customdata[2]}<extra></extra>", name="Rental listings"))
-    fig.update_layout(height=MAP_HEIGHT, margin={"l": 0, "r": 0, "t": 0, "b": 0}, mapbox=dict(style="carto-positron", center=center, zoom=zoom, bounds=NSW_MAP_BOUNDS if IS_EXTERNAL_MODE else None), legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01), uirevision=f"rent-map-{selected_suburb}")
-    event_state = st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": not IS_EXTERNAL_MODE, "responsive": True, "scrollZoom": True}, key="rent_map_chart", on_select="rerun", selection_mode="points")
-    picked_suburb = _resolve_map_selection(event_state)
-    if picked_suburb and picked_suburb != selected_suburb:
-        _set_selected_suburb(picked_suburb)
-        st.rerun()
+        focus_points = focus_points.sort_values(by=["rent_mid", "available_date"], ascending=[True, True], na_position="last")
+        selected_point = focus_points.loc[focus_points["listing_id"].astype(str) == selected_listing_id].head(1).copy()
+        if not selected_point.empty:
+            center = {"lat": float(selected_point.iloc[0]["latitude"]), "lon": float(selected_point.iloc[0]["longitude"])}
+            zoom = max(float(zoom), 14.2)
+        if len(focus_points) > 150:
+            focus_points = focus_points.head(150)
+            if not selected_point.empty and selected_point.iloc[0]["listing_id"] not in set(focus_points["listing_id"].tolist()):
+                focus_points = pd.concat([selected_point, focus_points.head(149)], ignore_index=True, sort=False)
+                focus_points = focus_points.drop_duplicates(subset=["listing_id"], keep="first")
+        fig.add_trace(go.Scattermapbox(lat=focus_points["latitude"], lon=focus_points["longitude"], mode="markers", marker=dict(size=9, color="#0d5ea6", opacity=0.88), customdata=list(zip(focus_points["suburb"], ["listing"] * len(focus_points), focus_points["rent_display"].fillna("N/A"), focus_points["bedrooms"], focus_points["listing_id"].astype(str))), text=focus_points["address"].fillna(""), hovertemplate="<b>%{text}</b><br>Suburb: %{customdata[0]}<br>Rent: %{customdata[2]}<br>Beds: %{customdata[3]}<extra></extra>", name="Rental listings"))
+        if not selected_point.empty:
+            fig.add_trace(go.Scattermapbox(lat=selected_point["latitude"], lon=selected_point["longitude"], mode="markers", marker=dict(size=12, color="#d97706", opacity=0.96), customdata=list(zip(selected_point["suburb"], ["listing"] * len(selected_point), selected_point["rent_display"].fillna("N/A"), selected_point["bedrooms"], selected_point["listing_id"].astype(str))), text=selected_point["address"].fillna(""), hovertemplate="<b>%{text}</b><br>Suburb: %{customdata[0]}<br>Rent: %{customdata[2]}<br>Beds: %{customdata[3]}<extra></extra>", name=tr("已选租盘", "Selected rental")))
+    fig.update_layout(height=MAP_HEIGHT, margin={"l": 0, "r": 0, "t": 0, "b": 0}, mapbox=dict(style="carto-positron", center=center, zoom=zoom, bounds=NSW_MAP_BOUNDS), legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01), uirevision=f"rent-map-{selected_suburb}")
+    event_state = map_slot.plotly_chart(fig, width="stretch", config={"displayModeBar": False, "responsive": True, "scrollZoom": True}, key="rent_map_chart", on_select="rerun", selection_mode="points")
+    picked = _resolve_map_selection(event_state)
+    if picked:
+        if picked["kind"] == "suburb" and picked["suburb"] != selected_suburb:
+            _set_selected_suburb(picked["suburb"])
+            return picked["suburb"]
+        if picked["kind"] == "listing" and picked["listing_id"] != (_selected_listing_id() or ""):
+            _set_selected_suburb(picked["suburb"])
+            _set_selected_listing_id(picked["listing_id"])
+            return picked["suburb"]
     return selected_suburb
 
 
@@ -909,11 +1179,8 @@ def _available_date_label(value):
 
 def _listing_card(row, *, key_prefix):
     with st.container(border=True):
-        if IS_EXTERNAL_MODE:
-            content_col = st.container()
-            image_col = None
-        else:
-            content_col, image_col = st.columns([2.2, 1])
+        content_col = st.container()
+        image_col = None
         with content_col:
             st.markdown(f"### {_rent_display_label(row)}")
             st.markdown(f"**{row['address']}**")
@@ -922,15 +1189,12 @@ def _listing_card(row, *, key_prefix):
             st.write(f"{tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}")
             st.write(f"{tr('Available date', 'Available date')}: {_available_date_label(row['available_date'])}")
             st.write(f"{tr('Agency', 'Agency')}: {row['agency_name'] if pd.notna(row['agency_name']) else 'N/A'}")
-            action_cols = st.columns(1 if IS_EXTERNAL_MODE else 2)
+            action_cols = st.columns(1)
             with action_cols[0]:
                 label = tr("移出 shortlist", "Remove") if str(row["listing_id"]) in _get_shortlist_ids() else tr("加入 shortlist", "Shortlist")
                 if st.button(label, key=f"{key_prefix}_toggle_{row['listing_id']}", use_container_width=True):
                     _toggle_shortlist(str(row["listing_id"]), row)
                     st.rerun()
-            if not IS_EXTERNAL_MODE:
-                with action_cols[1]:
-                    st.link_button(tr("打开租盘", "Open listing"), row["url"], use_container_width=True)
         if image_col is not None and pd.notna(row["main_image"]):
             with image_col:
                 st.image(row["main_image"], use_container_width=True)
@@ -995,14 +1259,15 @@ def _render_external_rent_table(listings, *, key_prefix):
         cols = st.columns(widths, gap="small")
         price_text = _rent_display_label(row)
         address_text = row["address"] if pd.notna(row.get("address")) else "N/A"
-        url = ""
-        address_html = address_text
+        row_suburb = str(row.get("suburb") or "").strip()
+        locate_enabled = bool(row.get("has_coordinates", False)) and bool(row_suburb)
+        locate_selected = str(row["listing_id"]) == (_selected_listing_id() or "")
         suburb_postcode = f"{row['suburb'] if pd.notna(row.get('suburb')) else '—'} / {row['postcode'] if pd.notna(row.get('postcode')) else '—'}"
         property_type = f"{row['property_group_label']} / {_title_case_subtype(row['property_subtype'])}"
         agency_label = row["agency_name"] if pd.notna(row.get("agency_name")) else tr("Contact agent", "Contact agent")
 
         cols[0].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-price'>{price_text}</div></div>", unsafe_allow_html=True)
-        cols[1].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-address'>{address_html}</div></div>", unsafe_allow_html=True)
+        cols[1].button(address_text, key=f"{key_prefix}_locate_{row['listing_id']}", use_container_width=True, disabled=not locate_enabled, type="secondary" if locate_selected else "tertiary", help=_listing_locate_help(_selected_suburb(), row_suburb, bool(row.get("has_coordinates", False))), on_click=_set_panel_listing_callback if locate_enabled else None, args=(str(row["listing_id"]), row_suburb) if locate_enabled else None)
         cols[2].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-muted'>{suburb_postcode}</div></div>", unsafe_allow_html=True)
         cols[3].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{property_type}</div></div>", unsafe_allow_html=True)
         cols[4].markdown(f"<div class='budget-table-row'><div class='budget-table-cell'>{_compact_count_cell(row['bedrooms'])}</div></div>", unsafe_allow_html=True)
@@ -1046,6 +1311,322 @@ def _render_external_rent_ranking_table(view, *, focused_suburb, key_prefix):
         cols[6].markdown(f"<div class='budget-table-row'><div class='budget-table-cell budget-table-price'>{row[tr('典型周租', 'Typical Weekly Rent')]}</div></div>", unsafe_allow_html=True)
 
 
+def _listing_locate_help(selected_suburb, row_suburb, has_coordinates):
+    if not has_coordinates:
+        return tr("该租盘暂时没有可用坐标。", "This rental does not have usable coordinates yet.")
+    if selected_suburb == "__ALL__":
+        return tr("点击后将聚焦该 suburb 并在地图上定位租盘。", "Click to focus that suburb and place this rental on the map.")
+    if selected_suburb == row_suburb:
+        return tr("点击后将地图定位到这套租盘。", "Click to locate this rental on the map.")
+    return tr("点击后将切换 suburb 聚焦并定位该租盘。", "Click to switch suburb focus and locate this rental.")
+
+
+def _selected_listing_row(listings):
+    selected_listing_id = _selected_listing_id()
+    if not selected_listing_id or listings.empty:
+        return None
+    match = listings.loc[listings["listing_id"].astype(str) == selected_listing_id].head(1)
+    if match.empty:
+        return None
+    return match.iloc[0]
+
+
+def _external_page_count(total_listings):
+    if total_listings <= 0:
+        return 1
+    return min(EXTERNAL_MAX_PAGES, max(1, math.ceil(total_listings / EXTERNAL_PAGE_SIZE)))
+
+
+def _build_same_suburb_panel_rows(listings, selected_suburb, selected_listing_id):
+    if selected_suburb == "__ALL__" or listings.empty:
+        return listings.head(0).copy(), 0
+    same_suburb = listings.loc[listings["suburb"].astype(str) == str(selected_suburb)].copy()
+    total_count = int(len(same_suburb))
+    if selected_listing_id:
+        same_suburb = same_suburb.loc[same_suburb["listing_id"].astype(str) != str(selected_listing_id)].copy()
+    return same_suburb.copy(), total_count
+
+
+def _render_external_same_suburb_section(listings, selected_suburb, selected_listing_id, *, page_prefix):
+    same_suburb_rows, total_count = _build_same_suburb_panel_rows(listings, selected_suburb, selected_listing_id)
+    if selected_suburb == "__ALL__" or total_count <= 0:
+        return
+    heading = tr("当前筛选下该 suburb 的全部租盘", "All rentals in this suburb within current filters")
+    st.markdown(
+        f"<div class='budget-panel-eyebrow'>{heading}<span class='budget-panel-badge'>{total_count}</span></div>",
+        unsafe_allow_html=True,
+    )
+    if same_suburb_rows.empty:
+        st.caption(tr("当前已选租盘是该 suburb 下本页唯一可切换租盘。", "The selected rental is currently the only switchable rental for this suburb in scope."))
+        return
+    total_pages = max(1, math.ceil(len(same_suburb_rows) / EXTERNAL_SAME_SUBURB_PAGE_SIZE))
+    current_page = min(int(st.session_state.get("rent_same_suburb_page", 0)), total_pages - 1)
+    st.session_state["rent_same_suburb_page"] = current_page
+    start = current_page * EXTERNAL_SAME_SUBURB_PAGE_SIZE
+    end = start + EXTERNAL_SAME_SUBURB_PAGE_SIZE
+    page_rows = same_suburb_rows.iloc[start:end].copy()
+    for _, row in page_rows.iterrows():
+        st.markdown(
+            f"""
+            <div class="budget-mini-card">
+              <div class="budget-mini-price">{_rent_display_label(row)}</div>
+              <div class="budget-mini-address">{row['address'] if pd.notna(row.get('address')) else 'N/A'}</div>
+              <div class="budget-mini-meta">
+                {row['suburb'] if pd.notna(row.get('suburb')) else 'N/A'} / {row['postcode'] if pd.notna(row.get('postcode')) else 'N/A'}<br>
+                {row['property_group_label']} / {_title_case_subtype(row['property_subtype'])} • {tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        action_cols = st.columns([1.15, 0.85])
+        action_cols[0].button(
+            tr("切换到这套并定位", "Switch to this one"),
+            key=f"{page_prefix}_same_suburb_switch_{row['listing_id']}",
+            use_container_width=True,
+            on_click=_set_selected_listing_callback,
+            args=(str(row["listing_id"]),),
+        )
+        shortlisted = str(row["listing_id"]) in _get_shortlist_ids()
+        action_cols[1].button(
+            tr("已选", "Saved") if shortlisted else tr("收藏", "Shortlist"),
+            key=f"{page_prefix}_same_suburb_shortlist_{row['listing_id']}",
+            use_container_width=True,
+            on_click=_toggle_shortlist,
+            args=(str(row["listing_id"]), row),
+        )
+    if total_pages > 1:
+        pager_cols = st.columns([1, 1.3, 1])
+        pager_cols[0].button(
+            tr("上一页", "Previous"),
+            key=f"{page_prefix}_same_suburb_prev",
+            use_container_width=True,
+            disabled=current_page <= 0,
+            on_click=_shift_rent_same_suburb_page,
+            args=(-1, total_pages),
+        )
+        with pager_cols[1]:
+            st.caption(tr(f"第 {current_page + 1} / {total_pages} 页", f"Page {current_page + 1} of {total_pages}"))
+        pager_cols[2].button(
+            tr("下一页", "Next"),
+            key=f"{page_prefix}_same_suburb_next",
+            use_container_width=True,
+            disabled=current_page >= total_pages - 1,
+            on_click=_shift_rent_same_suburb_page,
+            args=(1, total_pages),
+        )
+
+
+def _render_external_listing_detail(row, listings, selected_suburb):
+    header_cols = st.columns([1, 1])
+    with header_cols[0]:
+        st.button(
+            tr("返回列表", "Back to list"),
+            key=f"rent_detail_back_{row['listing_id']}",
+            use_container_width=True,
+            on_click=_clear_selected_listing,
+        )
+    with header_cols[1]:
+        shortlisted = str(row["listing_id"]) in _get_shortlist_ids()
+        st.button(
+            tr("移出 shortlist", "Remove") if shortlisted else tr("加入 shortlist", "Shortlist"),
+            key=f"rent_detail_shortlist_{row['listing_id']}",
+            use_container_width=True,
+            on_click=_toggle_shortlist,
+            args=(str(row["listing_id"]), row),
+        )
+    st.markdown(f"<div class='budget-panel-eyebrow'>{tr('当前聚焦 suburb', 'Focused suburb')}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='budget-card-price'>{_rent_display_label(row)}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='budget-card-address'>{row['address'] if pd.notna(row.get('address')) else 'N/A'}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='budget-card-meta'>{row['suburb'] if pd.notna(row.get('suburb')) else 'N/A'} / {row['postcode'] if pd.notna(row.get('postcode')) else 'N/A'}</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="budget-fact-grid">
+          <div class="budget-fact"><div class="budget-fact-label">{tr('Beds / Baths / Parking', 'Beds / Baths / Parking')}</div><div class="budget-fact-value">{_feature_triplet(row)}</div></div>
+          <div class="budget-fact"><div class="budget-fact-label">{tr('Type', 'Type')}</div><div class="budget-fact-value">{row['property_group_label']} / {_title_case_subtype(row['property_subtype'])}</div></div>
+          <div class="budget-fact"><div class="budget-fact-label">{tr('Available date', 'Available date')}</div><div class="budget-fact-value">{_available_date_label(row.get('available_date'))}</div></div>
+          <div class="budget-fact"><div class="budget-fact-label">{tr('Agency', 'Agency')}</div><div class="budget-fact-value">{row['agency_name'] if pd.notna(row.get('agency_name')) else 'N/A'}</div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if pd.notna(row.get("main_image")):
+        st.image(row["main_image"], width="stretch")
+    st.markdown("<div class='budget-panel-footer'>", unsafe_allow_html=True)
+    _render_external_same_suburb_section(listings, selected_suburb=selected_suburb, selected_listing_id=str(row["listing_id"]), page_prefix="rent")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _browser_filter_summary(*, budget_min, budget_max, min_budget, max_budget, min_bedrooms, exact_bedrooms):
+    if budget_min <= min_budget and budget_max >= max_budget:
+        rent_part = tr("不限周租", "Any weekly rent")
+    else:
+        rent_part = f"{_weekly_money(budget_min)}-{_weekly_money(budget_max)}"
+    if min_bedrooms <= 0:
+        beds_part = tr("不限卧室", "Any beds")
+    elif exact_bedrooms:
+        beds_part = tr(f"{min_bedrooms}房", f"{min_bedrooms} beds")
+    else:
+        beds_part = tr(f"{min_bedrooms}房+", f"{min_bedrooms}+ beds")
+    return f"{rent_part} / {beds_part}"
+
+
+def _render_browser_empty_state_card(*, focused_suburb, filter_summary, active_listing_count, browser_mode):
+    st.markdown(
+        f"""
+        <div class="budget-panel-summary">
+          <div class="budget-panel-eyebrow">{tr("匹配租盘", "Matching Rentals")}</div>
+          <div class="budget-panel-title">{tr("当前没有符合筛选条件的租盘", "No matching rentals right now")}</div>
+          <div class="budget-panel-subtitle">{tr(f"{focused_suburb} 目前没有符合你筛选条件的租盘", f"No rentals currently match your filters in {focused_suburb}")}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption(f"{tr('当前条件', 'Current filters')}: {filter_summary}")
+    st.caption(
+        tr(
+            f"该区域当前共有 {active_listing_count:,} 套在租房源。",
+            f"There are {active_listing_count:,} active rentals in this suburb.",
+        )
+    )
+    action_cols = st.columns(2)
+    action_cols[0].button(
+        tr("查看该区域全部租盘", "View all in this suburb"),
+        key=f"rent_browser_view_all_{focused_suburb}",
+        use_container_width=True,
+        disabled=active_listing_count <= 0 or browser_mode == "focused_all",
+        on_click=_handle_view_all_in_focused_suburb,
+    )
+    action_cols[1].button(
+        tr("调整筛选条件", "Adjust filters"),
+        key=f"rent_browser_adjust_{focused_suburb}",
+        use_container_width=True,
+        on_click=_handle_adjust_filters,
+    )
+
+
+def _resolve_focused_suburb_browser_rows(filtered_display_listings, all_display_listings, *, selected_suburb, browser_scope_mode):
+    if selected_suburb == "__ALL__":
+        return filtered_display_listings.copy(), int(len(filtered_display_listings))
+    filtered_rows = filtered_display_listings.loc[filtered_display_listings["suburb"].astype(str) == str(selected_suburb)].copy()
+    if browser_scope_mode == "focused_all":
+        all_rows = all_display_listings.loc[all_display_listings["suburb"].astype(str) == str(selected_suburb)].copy()
+        return all_rows, int(len(filtered_rows))
+    return filtered_rows, int(len(filtered_rows))
+
+
+def _render_external_listing_panel(listings, selected_suburb, metadata, *, browser_scope_mode="filtered", empty_state=None):
+    title = (
+        tr(f"{selected_suburb} 的匹配租盘", f"Matching Rentals in {selected_suburb}")
+        if selected_suburb != "__ALL__"
+        else tr("匹配租盘", "Matching Rentals")
+    )
+    eyebrow = (
+        tr("地图聚焦 suburb", "Focused suburb browser")
+        if selected_suburb != "__ALL__"
+        else tr("当前列表范围", "Current listing scope")
+    )
+    subtitle = (
+        tr(
+            "右侧租盘浏览仅切换为当前聚焦 suburb，顶部筛选、指标和 suburb 排序保持全局不变。",
+            "The browser is scoped to the focused suburb only. Top filters, metrics, and suburb ranking remain global.",
+        )
+        if selected_suburb != "__ALL__"
+        else tr(
+            "右侧租盘浏览显示当前顶部筛选条件下的全部匹配租盘。",
+            "The browser shows all rentals that match the current top filters.",
+        )
+    )
+    if browser_scope_mode == "focused_all" and selected_suburb != "__ALL__":
+        subtitle = tr(
+            "当前显示该 suburb 的全部在租房源，仅影响右侧浏览区，不会改写顶部筛选条件。",
+            "Currently showing all active rentals in this suburb. This only affects the browser panel and does not change the top filters.",
+        )
+    st.markdown(
+        f"""
+        <div class="budget-panel-summary">
+          <div class="budget-panel-eyebrow">{eyebrow}</div>
+          <div class="budget-panel-title">{title}<span class="budget-panel-badge">{len(listings):,}</span></div>
+          <div class="budget-panel-subtitle">{subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if listings.empty:
+        if empty_state and selected_suburb != "__ALL__":
+            _render_browser_empty_state_card(
+                focused_suburb=str(empty_state.get("focused_suburb") or selected_suburb),
+                filter_summary=str(empty_state.get("filter_summary") or "N/A"),
+                active_listing_count=int(empty_state.get("active_listing_count") or 0),
+                browser_mode=browser_scope_mode,
+            )
+        else:
+            st.info(tr("当前 suburb / 筛选条件下没有租盘。", "No rental listings match the current suburb or filters."))
+        return
+    selected_row = _selected_listing_row(listings)
+    if selected_row is not None:
+        with st.container(height=EXTERNAL_PANEL_BODY_HEIGHT):
+            _render_external_listing_detail(selected_row, listings, selected_suburb)
+        return
+    total_pages = _external_page_count(len(listings))
+    current_page = min(int(st.session_state.get("rent_listing_page", 0)), total_pages - 1)
+    st.session_state["rent_listing_page"] = current_page
+    start = current_page * EXTERNAL_PAGE_SIZE
+    end = min(start + EXTERNAL_PAGE_SIZE, len(listings))
+    with st.container(height=EXTERNAL_PANEL_BODY_HEIGHT):
+        for _, row in listings.iloc[start:end].copy().iterrows():
+            st.markdown(
+                f"""
+                <div class="budget-card">
+                  <div class="budget-card-price">{_rent_display_label(row)}</div>
+                  <div class="budget-card-address">{row['address'] if pd.notna(row.get('address')) else 'N/A'}</div>
+                  <div class="budget-card-meta">
+                    {row['suburb'] if pd.notna(row.get('suburb')) else 'N/A'} / {row['postcode'] if pd.notna(row.get('postcode')) else 'N/A'}<br>
+                    {row['property_group_label']} / {_title_case_subtype(row['property_subtype'])} • {tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            row_cols = st.columns([1.18, 0.82])
+            row_cols[0].button(
+                tr("查看详情并定位", "View details and locate"),
+                key=f"rent_panel_view_{row['listing_id']}",
+                use_container_width=True,
+                on_click=_set_panel_listing_callback,
+                args=(str(row["listing_id"]), str(row.get("suburb") or "")),
+            )
+            shortlisted = str(row["listing_id"]) in _get_shortlist_ids()
+            row_cols[1].button(
+                tr("已选", "Saved") if shortlisted else tr("收藏", "Shortlist"),
+                key=f"rent_panel_shortlist_{row['listing_id']}",
+                use_container_width=True,
+                on_click=_toggle_shortlist,
+                args=(str(row["listing_id"]), row),
+            )
+    st.markdown("<div class='budget-panel-footer'>", unsafe_allow_html=True)
+    pager_cols = st.columns([1, 1.3, 1])
+    pager_cols[0].button(
+        tr("上一页", "Previous"),
+        key="rent_panel_prev",
+        use_container_width=True,
+        disabled=current_page <= 0,
+        on_click=_shift_rent_listing_page,
+        args=(-1, total_pages),
+    )
+    with pager_cols[1]:
+        st.caption(tr(f"第 {current_page + 1} / {total_pages} 页", f"Page {current_page + 1} of {total_pages}"))
+    pager_cols[2].button(
+        tr("下一页", "Next"),
+        key="rent_panel_next",
+        use_container_width=True,
+        disabled=current_page >= total_pages - 1,
+        on_click=_shift_rent_listing_page,
+        args=(1, total_pages),
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def _format_summary_rent_range(min_value: int, max_value: int) -> str:
     return f"{_weekly_money(min_value)} – {_weekly_money(max_value)}"
 
@@ -1059,30 +1640,37 @@ def _prepare_external_display_listings(listings, *, sort_column, sort_ascending)
 
 
 def _render_listing_results(listings, selected_suburb):
-    if listings.empty:
-        st.info(tr("当前 suburb / 筛选条件下没有租盘。", "No rental listings match the current suburb or filters."))
-        return
-    label = selected_suburb if selected_suburb != "__ALL__" else tr("全部匹配 suburb", "All matching suburbs")
-    st.caption(f"{tr('当前查看', 'Showing')}: {label} | {len(listings):,} {tr('套租盘', 'rentals')}")
-    browse_limit = 24 if IS_EXTERNAL_MODE else 14
-    if IS_EXTERNAL_MODE:
-        _render_external_rent_table(listings.head(browse_limit), key_prefix="rent_browse")
-    else:
-        for _, row in listings.head(browse_limit).iterrows():
-            _listing_card(row, key_prefix="rent_browse")
-    if len(listings) > browse_limit:
-        st.caption(tr(f"当前先展示前 {browse_limit} 条更适合浏览的结果。", f"Showing the first {browse_limit} results for easier browsing."))
+    _render_external_rent_table(listings.head(24), key_prefix="rent_browse")
 
 
 def _render_shortlist_panel(shortlist_df):
     if shortlist_df.empty:
         st.info(tr("还没有加入 shortlist 的租盘。", "No rental listings have been shortlisted yet."))
         return
-    if IS_EXTERNAL_MODE:
-        _render_external_rent_table(shortlist_df, key_prefix="rent_shortlist")
-    else:
-        for _, row in shortlist_df.iterrows():
-            _listing_card(row, key_prefix="rent_shortlist")
+    for _, row in shortlist_df.iterrows():
+        with st.container(border=True):
+            info_col, action_col = st.columns([4.6, 2.0], gap="small")
+            with info_col:
+                st.markdown(f"**{row['address'] if pd.notna(row.get('address')) else 'N/A'}**")
+                st.caption(f"{row['suburb'] if pd.notna(row.get('suburb')) else 'N/A'} / {row['postcode'] if pd.notna(row.get('postcode')) else 'N/A'}")
+                st.write(f"{tr('Weekly Rent', 'Weekly Rent')}: {_rent_display_label(row)}")
+                st.write(f"{tr('Type', 'Type')}: {row['property_group_label']} / {_title_case_subtype(row['property_subtype'])}")
+                st.write(f"{tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}")
+                st.write(f"{tr('Available date', 'Available date')}: {_available_date_label(row.get('available_date'))}")
+            with action_col:
+                st.button(
+                    tr("移出 shortlist", "Remove"),
+                    key=f"rent_shortlist_remove_{row['listing_id']}",
+                    use_container_width=True,
+                    on_click=_toggle_shortlist,
+                    args=(str(row["listing_id"]), row),
+                )
+                if IS_PUBLIC_MODE:
+                    if st.button(tr("下载报告", "Download Report"), key=f"rent_shortlist_report_placeholder_{row['listing_id']}", use_container_width=True):
+                        st.info(tr("公开测试版报告功能仍在开发中，暂未开放下载。", "Report download for the public test build is still under development."))
+                else:
+                    if st.button(tr("下载报告", "Download Report"), key=f"rent_shortlist_report_internal_{row['listing_id']}", use_container_width=True):
+                        st.info(tr("租房 shortlist 报告仍在开发中。", "Rent shortlist reports are still under development."))
 
 
 def _resolve_commute_filter(df, suburb_lookup, *, query, mode, max_minutes):
@@ -1190,21 +1778,16 @@ def main():
     ensure_lang()
     inject_app_theme()
     _init_state()
-    if IS_EXTERNAL_MODE:
-        with st.sidebar:
-            sidebar_common(include_dwelling=False)
-        render_external_page_header(
-            badge=tr("Public Beta", "Public Beta"),
-            title=tr("租房预算地图", "Rent Budget"),
-            note=tr(
-                "测试版可帮助你更快筛选符合预算、通勤和房型偏好的租盘与 suburb。",
-                "Public beta to quickly narrow rentals and suburbs that fit your budget, commute, and property preferences.",
-            ),
-        )
-    if not IS_EXTERNAL_MODE:
-        st.markdown(f"<div class='budget-kicker'>{tr('租房工作流', 'Rental Workflow')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='budget-title'>{tr('租金预算地图', 'Rent Budget Map')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='budget-note'>{tr('核心问题：在我当前租金预算和条件下，哪些 suburb 可选、覆盖度如何、具体有哪些租盘？', 'Core question: under the current rental budget and filters, which suburbs are available, how strong is the budget coverage, and which specific rentals are there?')}</div>", unsafe_allow_html=True)
+    with st.sidebar:
+        sidebar_common(include_dwelling=False)
+    render_external_page_header(
+        badge=tr("Public Beta", "Public Beta"),
+        title=tr("租房预算地图", "Rent Budget"),
+        note=tr(
+            "测试版可帮助你更快筛选符合预算、通勤和房型偏好的租盘与 suburb。",
+            "Public beta to quickly narrow rentals and suburbs that fit your budget, commute, and property preferences.",
+        ),
+    )
     with perf.track("source_data_load"):
         source_status = get_domain_rent_source_status()
         df = load_domain_rent_listings()
@@ -1212,28 +1795,22 @@ def main():
         st.error(tr("未找到可用的 Domain 租盘 parquet 文件。", "No Domain rent parquet file was found."))
         st.code(source_status["path"])
         return
-    if IS_EXTERNAL_MODE:
-        df = apply_external_rent_listing_display_filter(df)
+    df = apply_external_rent_listing_display_filter(df)
     suburb_centroid_lookup = build_suburb_centroid_lookup(df)
     min_budget, max_budget = _normalise_weekly_bounds(df)
-    external_budget_options = _build_external_rent_budget_scale() if IS_EXTERNAL_MODE else []
-    if IS_EXTERNAL_MODE:
-        rent_applied_filters = _merge_rent_filter_defaults(st.session_state.get("rent_budget_applied_filters"), min_budget, max_budget)
-        st.session_state["rent_budget_applied_filters"] = rent_applied_filters
-        _apply_pending_external_rent_reset(external_budget_options)
-        rent_applied_filters = _merge_rent_filter_defaults(st.session_state.get("rent_budget_applied_filters"), min_budget, max_budget)
-        st.session_state["rent_budget_applied_filters"] = rent_applied_filters
-        _initialise_external_rent_widget_state_from_applied(rent_applied_filters, external_budget_options)
-    else:
-        rent_applied_filters = _default_rent_filters(min_budget, max_budget)
+    external_budget_options = _build_external_rent_budget_scale()
+    _apply_pending_ranking_filter_reset()
+    rent_applied_filters = _merge_rent_filter_defaults(st.session_state.get("rent_budget_applied_filters"), min_budget, max_budget)
+    st.session_state["rent_budget_applied_filters"] = rent_applied_filters
+    _apply_pending_external_rent_reset(external_budget_options)
+    rent_applied_filters = _merge_rent_filter_defaults(st.session_state.get("rent_budget_applied_filters"), min_budget, max_budget)
+    st.session_state["rent_budget_applied_filters"] = rent_applied_filters
+    _initialise_external_rent_widget_state_from_applied(rent_applied_filters, external_budget_options)
     external_budget_range = _coerce_external_rent_budget_range(
         st.session_state.get("rent_budget_external_applied_range"),
         options=external_budget_options,
         default_range=(int(rent_applied_filters.get("budget_min", min_budget)), int(rent_applied_filters.get("budget_max", max_budget))),
-    ) if IS_EXTERNAL_MODE else (min_budget, max_budget)
-    if not IS_EXTERNAL_MODE:
-        _ensure_budget_input_state(min_budget, max_budget)
-        _apply_pending_budget_widget_state(min_budget, max_budget)
+    )
     shortlist_ids = set(_get_shortlist_ids())
     shortlist_count = len(shortlist_ids)
     search_submitted = False
@@ -1244,28 +1821,18 @@ def main():
             budget_col, filter_col = st.columns([1.25, 2.0])
             with budget_col:
                 st.markdown(f"<div class='budget-budget-pill'>{tr('当前周租预算', 'Current weekly rent budget')}: {_weekly_money(min_budget)} - {_weekly_money(max_budget)}</div>", unsafe_allow_html=True)
-                if IS_EXTERNAL_MODE:
-                    budget_min, budget_max = st.select_slider(
-                        tr("周租预算区间", "Weekly rent budget range"),
-                        options=external_budget_options,
-                        value=external_budget_range,
-                        format_func=_format_external_rent_budget_label,
+                budget_min, budget_max = st.select_slider(
+                    tr("周租预算区间", "Weekly rent budget range"),
+                    options=external_budget_options,
+                    value=external_budget_range,
+                    format_func=_format_external_rent_budget_label,
+                )
+                st.caption(
+                    tr(
+                        "低租金段使用更细的预算档位，高租金段使用更宽的档位，以便更快浏览租盘。",
+                        "Lower weekly rents use finer steps and higher weekly rents use broader steps for faster browsing.",
                     )
-                    st.caption(
-                        tr(
-                            "低租金段使用更细的预算档位，高租金段使用更宽的档位，以便更快浏览租盘。",
-                            "Lower weekly rents use finer steps and higher weekly rents use broader steps for faster browsing.",
-                        )
-                    )
-                budget_min, budget_max = (budget_min, budget_max) if IS_EXTERNAL_MODE else st.slider(tr("周租预算区间", "Weekly rent budget range"), min_value=min_budget, max_value=max_budget, step=RENT_BUDGET_STEP, format="$%d", key="rent_budget_range_slider")
-                if not IS_EXTERNAL_MODE:
-                    input_cols = st.columns(2)
-                    with input_cols[0]:
-                        st.text_input(tr("最低周租", "Min weekly rent"), key="rent_budget_min_input")
-                    with input_cols[1]:
-                        st.text_input(tr("最高周租", "Max weekly rent"), key="rent_budget_max_input")
-                if not IS_EXTERNAL_MODE and st.session_state.get("rent_budget_input_error"):
-                    st.warning(st.session_state["rent_budget_input_error"])
+                )
             with filter_col:
                 pass
             row1, row2, row3 = st.columns([1.15, 1.0, 1.0])
@@ -1282,41 +1849,40 @@ def main():
             commute_query = ""
             commute_mode = "drive"
             commute_minutes = 30
-            if IS_EXTERNAL_MODE:
-                commute_col1, commute_col2, commute_col3 = st.columns([1.7, 1.0, 0.9])
-                with commute_col1:
-                    commute_query = st.text_input(
-                        tr("距离筛选", "Commute filter"),
-                        key="rent_commute_query",
-                        placeholder=tr("输入 suburb 或 postcode", "Enter a suburb or postcode"),
-                    )
-                with commute_col2:
-                    commute_mode = st.selectbox(
-                        tr("出行方式", "Travel mode"),
-                        options=["drive", "transit", "walk"],
-                        format_func=lambda value: {
-                            "drive": tr("开车", "Drive"),
-                            "transit": tr("公共交通", "Public transport"),
-                            "walk": tr("步行", "Walking"),
-                        }[value],
-                        key="rent_commute_mode",
-                    )
-                with commute_col3:
-                    commute_minutes = st.selectbox(
-                        tr("通勤时间", "Travel time"),
-                        options=[10, 20, 30, 45, 60],
-                        key="rent_commute_minutes",
-                    )
-                st.caption(
-                    tr(
-                        "测试版通勤筛选当前支持 suburb 和 postcode，暂不稳定支持完整街道地址。",
-                        "In beta, the commute filter currently supports suburbs and postcodes. Full street addresses are not yet supported reliably.",
-                    )
+            commute_col1, commute_col2, commute_col3 = st.columns([1.7, 1.0, 0.9])
+            with commute_col1:
+                commute_query = st.text_input(
+                    tr("距离筛选", "Commute filter"),
+                    key="rent_commute_query",
+                    placeholder=tr("输入 suburb 或 postcode", "Enter a suburb or postcode"),
                 )
+            with commute_col2:
+                commute_mode = st.selectbox(
+                    tr("出行方式", "Travel mode"),
+                    options=["drive", "transit", "walk"],
+                    format_func=lambda value: {
+                        "drive": tr("开车", "Drive"),
+                        "transit": tr("公共交通", "Public transport"),
+                        "walk": tr("步行", "Walking"),
+                    }[value],
+                    key="rent_commute_mode",
+                )
+            with commute_col3:
+                commute_minutes = st.selectbox(
+                    tr("通勤时间", "Travel time"),
+                    options=[10, 20, 30, 45, 60],
+                    key="rent_commute_minutes",
+                )
+            st.caption(
+                tr(
+                    "测试版通勤筛选当前支持 suburb 和 postcode，暂不稳定支持完整街道地址。",
+                    "In beta, the commute filter currently supports suburbs and postcodes. Full street addresses are not yet supported reliably.",
+                )
+            )
             commute_allowed_suburbs = None
             commute_allowed_listing_ids = None
             commute_label = None
-            if IS_EXTERNAL_MODE and str(commute_query).strip():
+            if str(commute_query).strip():
                 commute_allowed_suburbs, commute_allowed_listing_ids, _, commute_origin, commute_label = _resolve_commute_filter(
                     df,
                     suburb_centroid_lookup,
@@ -1353,7 +1919,7 @@ def main():
                 tr("房产大类", "Property type"),
                 options=group_values,
                 placeholder=tr("不限大类", "Any group"),
-                format_func=lambda group: f"{group_label_map[group]} ({group_count_map[group]:,})",
+                format_func=lambda group: _category_option_label(group_label_map[group], int(group_count_map[group])),
                 key="rent_selected_group_labels",
             )
             selected_property_groups = list(selected_group_values)
@@ -1379,7 +1945,7 @@ def main():
                 subtype_cols = st.columns(min(max(len(property_group_options), 1), 3))
                 for idx, (group, label, count) in enumerate(property_group_options):
                     with subtype_cols[idx % len(subtype_cols)]:
-                        with st.expander(f"{label} ({count:,})", expanded=group in selected_property_groups):
+                        with st.expander(_category_option_label(label, int(count)), expanded=group in selected_property_groups):
                             subtype_count_series = _subtype_counts(property_group_context, group)
                             subtype_values = list(subtype_count_series.index)
                             state_key = f"rent_subtypes_{group}"
@@ -1394,7 +1960,7 @@ def main():
                             picked_values = st.multiselect(
                                 tr("选择细分类", "Select subtypes"),
                                 options=subtype_values,
-                                format_func=lambda subtype, counts=subtype_count_series: f"{_title_case_subtype(subtype)} ({int(counts.get(subtype, 0)):,})",
+                                format_func=lambda subtype, counts=subtype_count_series: _category_option_label(_title_case_subtype(subtype), int(counts.get(subtype, 0))),
                                 key=state_key,
                             )
                             selected_property_subtypes.extend(picked_values)
@@ -1405,50 +1971,39 @@ def main():
             with action_cols[1]:
                 reset_submitted = st.form_submit_button(tr("重置筛选", "Reset filters"), use_container_width=True)
 
-    if IS_EXTERNAL_MODE and reset_submitted:
+    if reset_submitted:
         _reset_external_rent_filters(min_budget, max_budget, external_budget_options)
         st.rerun()
     if search_submitted:
-        if IS_EXTERNAL_MODE:
-            st.session_state["rent_budget_external_applied_range"] = (budget_min, budget_max)
-            st.session_state["rent_budget_applied_filters"] = _merge_rent_filter_defaults(
-                {
-                    "budget_min": budget_min,
-                    "budget_max": budget_max,
-                    "selected_suburbs": list(selected_suburbs),
-                    "selected_postcodes": list(selected_postcodes),
-                    "selected_property_groups": list(selected_property_groups),
-                    "selected_property_subtypes": sorted(set(selected_property_subtypes)),
-                    "commute_query": str(commute_query),
-                    "commute_mode": str(commute_mode),
-                    "commute_minutes": int(commute_minutes),
-                    "min_bedrooms": int(min_bedrooms),
-                    "min_bathrooms": int(min_bathrooms),
-                    "min_parking": int(min_parking),
-                    "exact_bedrooms": bool(st.session_state.get("rent_exact_bedrooms", False)),
-                    "exact_bathrooms": bool(st.session_state.get("rent_exact_bathrooms", False)),
-                    "exact_parking": bool(st.session_state.get("rent_exact_parking", False)),
-                    "selected_sort": _coerce_rent_sort_key(selected_sort),
-                    "show_subtypes": bool(st.session_state.get("rent_show_subtypes", False)),
-                    "commute_label": commute_label,
-                },
-                min_budget,
-                max_budget,
-            )
-            st.session_state["rent_external_search_triggered"] = True
-        else:
-            if _resolve_budget_submit_form_safe(
-                min_budget=min_budget,
-                max_budget=max_budget,
-                slider_range=(budget_min, budget_max),
-                text_min_raw=st.session_state.get("rent_budget_min_input"),
-                text_max_raw=st.session_state.get("rent_budget_max_input"),
-            ):
-                st.rerun()
-            budget_min, budget_max = st.session_state["rent_budget_range_slider"]
-    external_search_triggered = True if not IS_EXTERNAL_MODE else bool(st.session_state.get("rent_external_search_triggered", False))
+        st.session_state["rent_budget_external_applied_range"] = (budget_min, budget_max)
+        st.session_state["rent_budget_applied_filters"] = _merge_rent_filter_defaults(
+            {
+                "budget_min": budget_min,
+                "budget_max": budget_max,
+                "selected_suburbs": list(selected_suburbs),
+                "selected_postcodes": list(selected_postcodes),
+                "selected_property_groups": list(selected_property_groups),
+                "selected_property_subtypes": sorted(set(selected_property_subtypes)),
+                "commute_query": str(commute_query),
+                "commute_mode": str(commute_mode),
+                "commute_minutes": int(commute_minutes),
+                "min_bedrooms": int(min_bedrooms),
+                "min_bathrooms": int(min_bathrooms),
+                "min_parking": int(min_parking),
+                "exact_bedrooms": bool(st.session_state.get("rent_exact_bedrooms", False)),
+                "exact_bathrooms": bool(st.session_state.get("rent_exact_bathrooms", False)),
+                "exact_parking": bool(st.session_state.get("rent_exact_parking", False)),
+                "selected_sort": _coerce_rent_sort_key(selected_sort),
+                "show_subtypes": bool(st.session_state.get("rent_show_subtypes", False)),
+                "commute_label": commute_label,
+            },
+            min_budget,
+            max_budget,
+        )
+        st.session_state["rent_external_search_triggered"] = True
+    external_search_triggered = bool(st.session_state.get("rent_external_search_triggered", False))
 
-    if IS_EXTERNAL_MODE and not external_search_triggered:
+    if not external_search_triggered:
         with st.container(border=True):
             st.markdown(f"**{tr('排序 suburb', 'Ranked Suburbs')}**")
             st.info(tr("请设置筛选条件并点击搜索以查看结果", "Apply filters and click Search to view results"))
@@ -1466,57 +2021,56 @@ def main():
                     st.session_state["rent_shortlist_items"] = {}
                     st.rerun()
         timing_payload = perf.log(shortlisted=len(_get_shortlist_ids()), filtered_rows=0)
-        render_internal_timing_summary(timing_payload, enabled=not IS_EXTERNAL_MODE)
+        render_internal_timing_summary(timing_payload, enabled=False)
         return
     exact_bedrooms = bool(st.session_state.get("rent_exact_bedrooms", False))
     exact_bathrooms = bool(st.session_state.get("rent_exact_bathrooms", False))
     exact_parking = bool(st.session_state.get("rent_exact_parking", False))
-    if IS_EXTERNAL_MODE:
-        effective_filters = _merge_rent_filter_defaults(st.session_state.get("rent_budget_applied_filters"), min_budget, max_budget)
-        budget_min = int(effective_filters["budget_min"])
-        budget_max = int(effective_filters["budget_max"])
-        selected_property_groups = list(effective_filters.get("selected_property_groups", []))
-        selected_property_subtypes = list(effective_filters.get("selected_property_subtypes", []))
-        selected_suburbs = list(effective_filters.get("selected_suburbs", []))
-        selected_postcodes = list(effective_filters.get("selected_postcodes", []))
-        min_bedrooms = int(effective_filters.get("min_bedrooms", 0))
-        min_bathrooms = int(effective_filters.get("min_bathrooms", 0))
-        min_parking = int(effective_filters.get("min_parking", 0))
-        selected_sort = _coerce_rent_sort_key(effective_filters.get("selected_sort", selected_sort))
-        commute_query = str(effective_filters.get("commute_query", ""))
-        commute_mode = str(effective_filters.get("commute_mode", "drive"))
-        commute_minutes = int(effective_filters.get("commute_minutes", 30))
-        exact_bedrooms = bool(effective_filters.get("exact_bedrooms", False))
-        exact_bathrooms = bool(effective_filters.get("exact_bathrooms", False))
-        exact_parking = bool(effective_filters.get("exact_parking", False))
-        if commute_query.strip():
-            commute_allowed_listing_ids = None
-            commute_allowed_suburbs, commute_allowed_listing_ids, _, commute_origin, commute_label = _resolve_commute_filter(
-                df,
-                suburb_centroid_lookup,
-                query=commute_query,
-                mode=commute_mode,
-                max_minutes=int(commute_minutes),
-            )
-            st.session_state["rent_commute_notice"] = None if commute_origin.get("matched") else tr(
-                "无法识别该地点，请优先使用 NSW suburb、postcode 或当前房源地址。",
-                "That location could not be resolved. Try an NSW suburb or postcode.",
-            )
-        else:
-            commute_allowed_suburbs = None
-            commute_allowed_listing_ids = None
-            commute_origin = {"matched": False, "label": ""}
-            commute_label = None
-            st.session_state["rent_commute_notice"] = None
+    effective_filters = _merge_rent_filter_defaults(st.session_state.get("rent_budget_applied_filters"), min_budget, max_budget)
+    budget_min = int(effective_filters["budget_min"])
+    budget_max = int(effective_filters["budget_max"])
+    selected_property_groups = list(effective_filters.get("selected_property_groups", []))
+    selected_property_subtypes = list(effective_filters.get("selected_property_subtypes", []))
+    selected_suburbs = list(effective_filters.get("selected_suburbs", []))
+    selected_postcodes = list(effective_filters.get("selected_postcodes", []))
+    min_bedrooms = int(effective_filters.get("min_bedrooms", 0))
+    min_bathrooms = int(effective_filters.get("min_bathrooms", 0))
+    min_parking = int(effective_filters.get("min_parking", 0))
+    selected_sort = _coerce_rent_sort_key(effective_filters.get("selected_sort", selected_sort))
+    commute_query = str(effective_filters.get("commute_query", ""))
+    commute_mode = str(effective_filters.get("commute_mode", "drive"))
+    commute_minutes = int(effective_filters.get("commute_minutes", 30))
+    exact_bedrooms = bool(effective_filters.get("exact_bedrooms", False))
+    exact_bathrooms = bool(effective_filters.get("exact_bathrooms", False))
+    exact_parking = bool(effective_filters.get("exact_parking", False))
+    if commute_query.strip():
+        commute_allowed_listing_ids = None
+        commute_allowed_suburbs, commute_allowed_listing_ids, _, commute_origin, commute_label = _resolve_commute_filter(
+            df,
+            suburb_centroid_lookup,
+            query=commute_query,
+            mode=commute_mode,
+            max_minutes=int(commute_minutes),
+        )
+        st.session_state["rent_commute_notice"] = None if commute_origin.get("matched") else tr(
+            "无法识别该地点，请优先使用 NSW suburb、postcode 或当前房源地址。",
+            "That location could not be resolved. Try an NSW suburb or postcode.",
+        )
+    else:
+        commute_allowed_suburbs = None
+        commute_allowed_listing_ids = None
+        commute_origin = {"matched": False, "label": ""}
+        commute_label = None
+        st.session_state["rent_commute_notice"] = None
     commute_notice = st.session_state.get("rent_commute_notice")
     group_notice = st.session_state.get("rent_group_notice")
     with (st.spinner("Searching...") if search_submitted else nullcontext()):
         with perf.track("filter_application"):
             filtered_rent_listings, filter_debug_steps = _apply_rent_filters(df, budget_min=budget_min, budget_max=budget_max, min_budget=min_budget, max_budget=max_budget, selected_property_groups=selected_property_groups, selected_property_subtypes=selected_property_subtypes, selected_suburbs=selected_suburbs, selected_postcodes=selected_postcodes, min_bedrooms=min_bedrooms, min_bathrooms=min_bathrooms, min_parking=min_parking, exact_bedrooms=exact_bedrooms, exact_bathrooms=exact_bathrooms, exact_parking=exact_parking, allowed_listing_ids=commute_allowed_listing_ids, allowed_suburbs=commute_allowed_suburbs, include_budget=True)
-            context_rent_listings = filtered_rent_listings.copy() if IS_EXTERNAL_MODE else _apply_rent_filters(df, budget_min=budget_min, budget_max=budget_max, min_budget=min_budget, max_budget=max_budget, selected_property_groups=selected_property_groups, selected_property_subtypes=selected_property_subtypes, selected_suburbs=selected_suburbs, selected_postcodes=selected_postcodes, min_bedrooms=min_bedrooms, min_bathrooms=min_bathrooms, min_parking=min_parking, exact_bedrooms=exact_bedrooms, exact_bathrooms=exact_bathrooms, exact_parking=exact_parking, allowed_listing_ids=commute_allowed_listing_ids, allowed_suburbs=commute_allowed_suburbs, include_budget=False)[0]
+            context_rent_listings = filtered_rent_listings.copy()
     sort_column, sort_ascending = RENT_SORT_SPECS[_coerce_rent_sort_key(selected_sort)]
     filtered_rent_listings = filtered_rent_listings.sort_values(by=[sort_column, "suburb", "address"], ascending=[sort_ascending, True, True], na_position="last")
-    display_rent_listings = _prepare_external_display_listings(filtered_rent_listings, sort_column=sort_column, sort_ascending=sort_ascending) if IS_EXTERNAL_MODE else filtered_rent_listings
+    display_rent_listings = _prepare_external_display_listings(filtered_rent_listings, sort_column=sort_column, sort_ascending=sort_ascending)
     with perf.track("ranking_table_prep"):
         suburb_summary = _suburb_summary(context_rent_listings, budget_min=budget_min, budget_max=budget_max)
     selected_suburb = _selected_suburb()
@@ -1529,18 +2083,14 @@ def main():
         _set_selected_suburb("__ALL__")
         selected_suburb = "__ALL__"
     focused_rent_listings = filtered_rent_listings.loc[filtered_rent_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else filtered_rent_listings.copy()
-    focused_display_listings = display_rent_listings.loc[display_rent_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else display_rent_listings.copy()
     focused_summary = suburb_summary.loc[suburb_summary["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else suburb_summary
     context_scope = context_rent_listings.loc[context_rent_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else context_rent_listings
     insight = _rent_insight(focused_rent_listings if selected_suburb != "__ALL__" else filtered_rent_listings, context_scope, focused_summary if selected_suburb != "__ALL__" else suburb_summary, focused_suburb=selected_suburb, budget_max=budget_max)
-    if IS_EXTERNAL_MODE:
-        shortlist_df = display_rent_listings.loc[display_rent_listings["listing_id"].astype(str).isin(shortlist_ids)].copy()
-        shortlist_count = int(len(shortlist_df))
-        if {"sort_has_numeric", "sort_primary", "suburb", "address"}.issubset(shortlist_df.columns):
-            shortlist_df = shortlist_df.sort_values(by=["sort_has_numeric", "sort_primary", "suburb", "address"], ascending=[False, sort_ascending, True, True], na_position="last")
-    else:
-        shortlist_df = _build_shortlist_df(df).sort_values(by=["rent_mid", "suburb", "address"], ascending=[True, True, True], na_position="last")
-    show_debug = (not IS_EXTERNAL_MODE) and str(st.query_params.get("rent_debug", "0")) == "1"
+    shortlist_df = display_rent_listings.loc[display_rent_listings["listing_id"].astype(str).isin(shortlist_ids)].copy()
+    shortlist_count = int(len(shortlist_df))
+    if {"sort_has_numeric", "sort_primary", "suburb", "address"}.issubset(shortlist_df.columns):
+        shortlist_df = shortlist_df.sort_values(by=["sort_has_numeric", "sort_primary", "suburb", "address"], ascending=[False, sort_ascending, True, True], na_position="last")
+    show_debug = False
     focus_notice = _consume_focus_notice("rent_focus_notice")
     if show_debug:
         with st.expander("Rent Debug", expanded=False):
@@ -1549,12 +2099,11 @@ def main():
         st.warning(commute_notice)
     if group_notice:
         st.warning(group_notice)
-    if IS_EXTERNAL_MODE:
-        filters_for_summary = dict(effective_filters)
-        if commute_label:
-            filters_for_summary["commute_label"] = commute_label
-        with st.container(border=True):
-            _render_external_applied_filter_summary(filters_for_summary, rent_mode=True)
+    filters_for_summary = dict(effective_filters)
+    if commute_label:
+        filters_for_summary["commute_label"] = commute_label
+    with st.container(border=True):
+        _render_external_applied_filter_summary(filters_for_summary, rent_mode=True)
     if filtered_rent_listings.empty:
         st.warning(tr("当前筛选条件下没有匹配租盘。", "No rental listings match the current filters."))
     else:
@@ -1573,15 +2122,81 @@ def main():
             if selected_suburb != "__ALL__":
                 st.caption(f"{tr('当前聚焦 suburb', 'Currently focused suburb')}: {selected_suburb}")
         with st.container(border=True):
-            st.markdown(f"**{tr('排序 suburb', 'Ranked Suburbs')}**")
+            focus_cols = st.columns([2.4, 1])
+            with focus_cols[0]:
+                st.markdown(f"**{tr('排序 suburb', 'Ranked Suburbs')}**")
+                st.caption(tr("先按 suburb 搜索并设置最少挂牌阈值，再通过表格聚焦地图。", "Search by suburb, apply a minimum listings threshold, then use the table to focus the map."))
+            with focus_cols[1]:
+                if selected_suburb != "__ALL__":
+                    st.caption(f"{tr('当前聚焦 suburb', 'Focused suburb')}: {selected_suburb}")
             _render_suburb_ranking(focused_summary if selected_suburb != "__ALL__" else suburb_summary)
-        with st.container(border=True):
-            st.markdown(f"**{tr('Map', 'Map')}**")
-            with perf.track("map_prep"):
-                selected_suburb = _build_map(context_rent_listings, suburb_summary, selected_suburb)
-        with st.container(border=True):
-            st.markdown(f"**{tr('租盘浏览', 'Rental Listings')}**")
-            _render_listing_results(focused_display_listings if IS_EXTERNAL_MODE else focused_rent_listings, selected_suburb)
+        browser_scope_mode = _browser_scope_mode()
+        all_display_listings = _prepare_external_display_listings(df, sort_column=sort_column, sort_ascending=sort_ascending)
+        browser_listings, focused_match_count = _resolve_focused_suburb_browser_rows(
+            display_rent_listings,
+            all_display_listings,
+            selected_suburb=selected_suburb,
+            browser_scope_mode=browser_scope_mode,
+        )
+        selected_listing_id = _selected_listing_id()
+        if selected_listing_id and selected_listing_id not in set(browser_listings["listing_id"].astype(str)):
+            _clear_selected_listing()
+        browser_empty_state = None
+        if selected_suburb != "__ALL__" and focused_match_count <= 0:
+            browser_empty_state = {
+                "focused_suburb": selected_suburb,
+                "filter_summary": _browser_filter_summary(
+                    budget_min=budget_min,
+                    budget_max=budget_max,
+                    min_budget=min_budget,
+                    max_budget=max_budget,
+                    min_bedrooms=min_bedrooms,
+                    exact_bedrooms=exact_bedrooms,
+                ),
+                "active_listing_count": int(len(df.loc[df["suburb"].astype(str) == str(selected_suburb)])),
+            }
+        map_col, panel_col = st.columns([7, 3], gap="large")
+        with map_col:
+            with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
+                st.markdown(f"**{tr('Map', 'Map')}**")
+                st.caption(tr("先看覆盖率，再看点位。首次加载需几秒。", "Read coverage first, then markers. First load can take a few seconds."))
+                with perf.track("map_prep_external_panel"):
+                    selected_suburb = _build_map(context_rent_listings, suburb_summary, selected_suburb)
+        browser_listings, focused_match_count = _resolve_focused_suburb_browser_rows(
+            display_rent_listings,
+            all_display_listings,
+            selected_suburb=selected_suburb,
+            browser_scope_mode=browser_scope_mode,
+        )
+        selected_listing_id = _selected_listing_id()
+        if selected_listing_id and selected_listing_id not in set(browser_listings["listing_id"].astype(str)):
+            _clear_selected_listing()
+        if selected_suburb != "__ALL__" and focused_match_count <= 0:
+            browser_empty_state = {
+                "focused_suburb": selected_suburb,
+                "filter_summary": _browser_filter_summary(
+                    budget_min=budget_min,
+                    budget_max=budget_max,
+                    min_budget=min_budget,
+                    max_budget=max_budget,
+                    min_bedrooms=min_bedrooms,
+                    exact_bedrooms=exact_bedrooms,
+                ),
+                "active_listing_count": int(len(df.loc[df["suburb"].astype(str) == str(selected_suburb)])),
+            }
+        else:
+            browser_empty_state = None
+        with panel_col:
+            with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
+                if selected_suburb != "__ALL__":
+                    st.caption(f"{tr('当前聚焦 suburb', 'Focused suburb')}: {selected_suburb}")
+                _render_external_listing_panel(
+                    browser_listings,
+                    selected_suburb,
+                    None,
+                    browser_scope_mode=browser_scope_mode,
+                    empty_state=browser_empty_state,
+                )
     with st.container(border=True):
         status_cols = st.columns([2.5, 1])
         with status_cols[0]:
@@ -1596,7 +2211,7 @@ def main():
             _render_shortlist_panel(shortlist_df)
 
     timing_payload = perf.log(shortlisted=len(_get_shortlist_ids()), filtered_rows=int(len(filtered_rent_listings)))
-    render_internal_timing_summary(timing_payload, enabled=not IS_EXTERNAL_MODE)
+    render_internal_timing_summary(timing_payload, enabled=False)
 
 
 if __name__ == "__main__":

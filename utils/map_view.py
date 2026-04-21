@@ -15,7 +15,7 @@ NSW_MAP_BOUNDS = {
 NSW_DEFAULT_CENTER = {"lat": -32.4, "lon": 147.0}
 NSW_DEFAULT_ZOOM = 5.35
 NSW_MIN_ZOOM = 5.1
-NSW_MAX_ZOOM = 12.2
+NSW_MAX_ZOOM = 12.8
 
 
 def _coerce_number(value: Any) -> float | None:
@@ -81,6 +81,30 @@ def _bounds_from_geojson(geojson: dict[str, Any] | None, suburb_key: str | None)
     return combined
 
 
+def _bounds_from_geojson_keys(geojson: dict[str, Any] | None, suburb_keys: set[str]) -> tuple[float, float, float, float] | None:
+    if not geojson or not suburb_keys:
+        return None
+    combined: tuple[float, float, float, float] | None = None
+    for feature in geojson.get("features", []):
+        properties = feature.get("properties", {}) if isinstance(feature, dict) else {}
+        join_key = str(properties.get("join_key") or "").strip()
+        if join_key not in suburb_keys:
+            continue
+        feature_bounds = _bounds_from_geometry(feature.get("geometry"))
+        if feature_bounds is None:
+            continue
+        if combined is None:
+            combined = feature_bounds
+        else:
+            combined = (
+                min(combined[0], feature_bounds[0]),
+                min(combined[1], feature_bounds[1]),
+                max(combined[2], feature_bounds[2]),
+                max(combined[3], feature_bounds[3]),
+            )
+    return combined
+
+
 def _bounds_from_points(frame: pd.DataFrame, lat_col: str, lon_col: str) -> tuple[float, float, float, float] | None:
     if frame.empty or lat_col not in frame.columns or lon_col not in frame.columns:
         return None
@@ -114,7 +138,7 @@ def _zoom_for_bounds(
     *,
     width_px: float = 1120.0,
     height_px: float = 760.0,
-    padding_ratio: float = 0.82,
+    padding_ratio: float = 0.90,
     min_zoom: float = 5.0,
     max_zoom: float = 12.8,
 ) -> float:
@@ -128,6 +152,20 @@ def _zoom_for_bounds(
     return float(max(min(min(lon_zoom, lat_zoom), max_zoom), min_zoom))
 
 
+def _expanded_bounds(bounds: tuple[float, float, float, float], pad_ratio: float) -> tuple[float, float, float, float]:
+    min_lon, min_lat, max_lon, max_lat = bounds
+    lon_span = max(max_lon - min_lon, 0.004)
+    lat_span = max(max_lat - min_lat, 0.004)
+    lon_pad = lon_span * pad_ratio
+    lat_pad = lat_span * pad_ratio
+    return (
+        max(NSW_MAP_BOUNDS["west"], min_lon - lon_pad),
+        max(NSW_MAP_BOUNDS["south"], min_lat - lat_pad),
+        min(NSW_MAP_BOUNDS["east"], max_lon + lon_pad),
+        min(NSW_MAP_BOUNDS["north"], max_lat + lat_pad),
+    )
+
+
 def resolve_budget_map_view(
     *,
     selected_suburb: str,
@@ -139,18 +177,48 @@ def resolve_budget_map_view(
     if selected_suburb != "__ALL__":
         polygon_bounds = _bounds_from_geojson(boundary_geojson, suburb_key)
         if polygon_bounds is not None:
-            return _center_from_bounds(polygon_bounds), _zoom_for_bounds(polygon_bounds)
+            fitted_bounds = _expanded_bounds(polygon_bounds, 0.08)
+            return _center_from_bounds(fitted_bounds), _zoom_for_bounds(fitted_bounds, padding_ratio=0.94, max_zoom=13.0)
 
         focused_summary = map_summary.loc[map_summary["suburb"] == selected_suburb].copy() if "suburb" in map_summary.columns else pd.DataFrame()
         focused_points = map_df.loc[map_df["suburb"] == selected_suburb].copy() if "suburb" in map_df.columns else pd.DataFrame()
 
         point_bounds = _bounds_from_points(focused_points, "latitude", "longitude")
         if point_bounds is not None:
-            return _center_from_bounds(point_bounds), _zoom_for_bounds(point_bounds, max_zoom=12.2)
+            fitted_bounds = _expanded_bounds(point_bounds, 0.10)
+            return _center_from_bounds(fitted_bounds), _zoom_for_bounds(fitted_bounds, padding_ratio=0.93, max_zoom=12.8)
 
         summary_bounds = _bounds_from_points(focused_summary, "map_latitude", "map_longitude")
         if summary_bounds is not None:
             return _center_from_bounds(summary_bounds), 11.2
+
+    if boundary_geojson is not None and not map_summary.empty and "geo_suburb_key" in map_summary.columns:
+        suburb_keys = {
+            str(value).strip()
+            for value in map_summary["geo_suburb_key"].dropna().tolist()
+            if str(value).strip()
+        }
+        polygon_bounds = _bounds_from_geojson_keys(boundary_geojson, suburb_keys)
+        if polygon_bounds is not None:
+            suburb_count = max(len(suburb_keys), 1)
+            if suburb_count == 1:
+                fitted_bounds = _expanded_bounds(polygon_bounds, 0.08)
+                return _center_from_bounds(fitted_bounds), _zoom_for_bounds(fitted_bounds, padding_ratio=0.94, min_zoom=5.1, max_zoom=13.0)
+            if suburb_count == 2:
+                fitted_bounds = _expanded_bounds(polygon_bounds, 0.09)
+                return _center_from_bounds(fitted_bounds), _zoom_for_bounds(fitted_bounds, padding_ratio=0.93, min_zoom=5.1, max_zoom=12.3)
+            fitted_bounds = _expanded_bounds(polygon_bounds, 0.11)
+            return _center_from_bounds(fitted_bounds), _zoom_for_bounds(fitted_bounds, padding_ratio=0.91, min_zoom=5.1, max_zoom=11.4)
+
+    summary_bounds = _bounds_from_points(map_summary, "map_latitude", "map_longitude")
+    if summary_bounds is not None:
+        fitted_bounds = _expanded_bounds(summary_bounds, 0.11)
+        return _center_from_bounds(fitted_bounds), _zoom_for_bounds(fitted_bounds, padding_ratio=0.91, min_zoom=5.1, max_zoom=11.2)
+
+    point_bounds = _bounds_from_points(map_df, "latitude", "longitude")
+    if point_bounds is not None:
+        fitted_bounds = _expanded_bounds(point_bounds, 0.11)
+        return _center_from_bounds(fitted_bounds), _zoom_for_bounds(fitted_bounds, padding_ratio=0.91, min_zoom=5.1, max_zoom=11.2)
 
     center_source = map_summary if not map_summary.empty else map_df
     if center_source.empty:

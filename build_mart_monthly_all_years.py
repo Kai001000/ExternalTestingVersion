@@ -93,7 +93,7 @@ def _load_dim_region16(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(
             f"[MISSING DIM] {path}\n"
-            f"Please create dim_region16_mapping.csv first."
+            f"Please create the Market Region compatibility dim first."
         )
 
     d = pd.read_csv(path, dtype=str)
@@ -237,7 +237,7 @@ def main():
     print("REGION_GROUP counts:")
     print(df["region_group"].value_counts(dropna=False))
 
-    print("\nREGION16 counts:")
+    print("\nMarket Region counts (legacy REGION16 token):")
     print(df["region16_name"].value_counts(dropna=False).head(30))
 
     print("\nBuilding MONTHLY mart for years:", sorted(years) if years else "(unknown)")
@@ -245,7 +245,7 @@ def main():
     print("contract_date min/max:", df["contract_date"].min(), df["contract_date"].max())
     print("purchase_price min/max:", int(df["purchase_price"].min()), int(df["purchase_price"].max()))
     print("Dim GCCSA:", DIM_GCCSA_PATH)
-    print("Dim REGION16:", DIM_REGION16_PATH)
+    print("Dim Market Region (legacy REGION16 path):", DIM_REGION16_PATH)
 
     _build_level(df, "NSW").to_parquet(OUT_DIR / f"mart_monthly_nsw_{label}.parquet", index=False)
     _build_level(df, "REGION").to_parquet(OUT_DIR / f"mart_monthly_region_{label}.parquet", index=False)

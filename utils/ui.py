@@ -97,6 +97,39 @@ def render_external_page_header(*, badge: str, title: str, note: str) -> None:
     st.markdown(f"<div class='budget-note'>{note}</div>", unsafe_allow_html=True)
 
 
+def render_external_map_legend(
+    *,
+    coverage_label: str,
+    low_label: str,
+    high_label: str,
+    selected_label: str,
+    other_label: str,
+) -> None:
+    st.markdown(
+        f"""
+        <div style="margin-top:0.7rem;border:1px solid rgba(148,163,184,0.18);border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.95));padding:0.8rem 0.9rem;">
+          <div style="font-size:0.74rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#8c5e3c;margin-bottom:0.45rem;">{coverage_label}</div>
+          <div style="display:flex;align-items:center;gap:0.55rem;margin-bottom:0.75rem;">
+            <span style="font-size:0.74rem;color:#6b7280;">{low_label}</span>
+            <div style="flex:1;height:10px;border-radius:999px;background:linear-gradient(90deg,#f2efe8 0%,#e5ddb7 25%,#c6d68c 55%,#7fbf7b 78%,#2c7f62 100%);"></div>
+            <span style="font-size:0.74rem;color:#6b7280;">{high_label}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.5rem;">
+            <div style="display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;color:#374151;">
+              <span style="display:inline-block;width:12px;height:12px;border-radius:999px;background:#d97706;border:2px solid rgba(255,255,255,0.92);box-shadow:0 0 0 1px rgba(15,23,42,0.08);"></span>
+              <span>{selected_label}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;color:#374151;">
+              <span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#0d5ea6;opacity:0.9;"></span>
+              <span>{other_label}</span>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def sidebar_common(*, include_dwelling: bool = True) -> dict:
     st.markdown(f"**{t('lang')}**")
     external_language_switch(key="global_lang_switch")

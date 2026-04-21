@@ -226,7 +226,7 @@ def load_ranking_snapshot(dwelling: str, calibre: str, stable_ratio: float | Non
         columns={
             "region": "Suburb",
             "postcode": "Postcode",
-            "region_name": "Region16",
+            "region_name": "Market Region",
             "date": "As of",
             "rolling_median": "28d median",
             "sales_28d": "28d sales",
@@ -235,11 +235,11 @@ def load_ranking_snapshot(dwelling: str, calibre: str, stable_ratio: float | Non
     )
 
     out["Postcode"] = out["Postcode"].fillna("").astype(str)
-    out["Region16"] = out["Region16"].fillna("").astype(str)
+    out["Market Region"] = out["Market Region"].fillna("").astype(str)
     out["As of"] = pd.to_datetime(out["As of"], errors="coerce").dt.normalize()
 
     return out[
-        ["Suburb", "Postcode", "Region16", "As of", "28d median", "28d sales", "Stable YoY"]
+        ["Suburb", "Postcode", "Market Region", "As of", "28d median", "28d sales", "Stable YoY"]
     ].reset_index(drop=True)
 
 

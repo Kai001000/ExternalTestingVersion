@@ -460,7 +460,7 @@ def build_suburb_rank_snapshot(
     out = out.rename(columns={
         "region": "Suburb",
         "postcode": "Postcode",
-        "region16_name": "Region16",
+        "region16_name": "Market Region",
         "date": "As of",
         "rolling_median": "28d median",
         "sales_28d": "28d sales",
@@ -469,7 +469,7 @@ def build_suburb_rank_snapshot(
     })
 
     out["Postcode"] = out["Postcode"].fillna("").astype(str)
-    out["Region16"] = out["Region16"].fillna("").astype(str)
+    out["Market Region"] = out["Market Region"].fillna("").astype(str)
     out["As of"] = _coerce_date(out["As of"])
 
     return out.reset_index(drop=True)
@@ -502,7 +502,7 @@ def filter_rank_snapshot_table(
     d["As of"] = _coerce_date(d["As of"])
 
     if selected_region16:
-        d = d[d["Region16"].isin(selected_region16)].copy()
+        d = d[d["Market Region"].isin(selected_region16)].copy()
 
     if sales_min is not None:
         d = d[d["28d sales"].fillna(-np.inf) >= float(sales_min)].copy()
@@ -525,7 +525,7 @@ def filter_rank_snapshot_table(
 
     d = d.sort_values(metric, ascending=False).reset_index(drop=True)
 
-    out = d[["Suburb", "Postcode", "Region16", "As of", "28d median", "28d sales", metric]].copy()
+    out = d[["Suburb", "Postcode", "Market Region", "As of", "28d median", "28d sales", metric]].copy()
     out["As of"] = out["As of"].apply(fmt_date)
     out["28d median"] = out["28d median"].apply(fmt_float0)
     out["28d sales"] = out["28d sales"].apply(fmt_int)

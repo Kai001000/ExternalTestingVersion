@@ -1,0 +1,331 @@
+{
+  "main_kpi_examples": {
+    "greater_sydney_house_dual_3m": {
+      "preset": "3 Month",
+      "latest_point": "2026-03-05 00:00:00",
+      "latest_median": 1420000.0,
+      "stable_yoy": -0.08387096774193548,
+      "sales": 2670,
+      "range_low": 1290000.0,
+      "range_high": 1430000.0,
+      "latest_visible_point": "2026-04-16 00:00:00",
+      "latest_available_point": "2026-04-16 00:00:00"
+    },
+    "greater_sydney_house_dual_1y": {
+      "preset": "1 Year",
+      "latest_point": "2026-03-05 00:00:00",
+      "latest_median": 1420000.0,
+      "stable_yoy": -0.08387096774193548,
+      "sales": 2670,
+      "range_low": 1290000.0,
+      "range_high": 1620000.0,
+      "latest_visible_point": "2026-04-16 00:00:00",
+      "latest_available_point": "2026-04-16 00:00:00"
+    },
+    "greater_sydney_house_long_3m": {
+      "preset": "3 Month",
+      "latest_point": "2026-03-05 00:00:00",
+      "latest_median": 1353152.5738636365,
+      "stable_yoy": -0.08035839430134206,
+      "sales": 2670,
+      "range_low": 1290000.0,
+      "range_high": 1430000.0,
+      "latest_visible_point": "2026-04-16 00:00:00",
+      "latest_available_point": "2026-04-16 00:00:00"
+    }
+  },
+  "band_cases": {
+    "nsw_house_3m": {
+      "level": "NSW",
+      "regions": [
+        "NSW"
+      ],
+      "dwelling": "HOUSE",
+      "preset": "3 Month",
+      "band_rows": 108265,
+      "chart_rows": 1895,
+      "chart_min_date": "2026-01-16",
+      "chart_max_date": "2026-04-16",
+      "summary": {
+        "<750k": {
+          "median": 550000.0,
+          "yoy": 0.0,
+          "anchor_date": "2026-03-19"
+        },
+        "750k-1.2M": {
+          "median": 930000.0,
+          "yoy": 0.00540540540540535,
+          "anchor_date": "2026-03-16"
+        },
+        "1.2M-2M": {
+          "median": 1420000.0,
+          "yoy": -0.03401360544217691,
+          "anchor_date": "2026-03-11"
+        },
+        "2M-3M": {
+          "median": 2380000.0,
+          "yoy": -0.008333333333333304,
+          "anchor_date": "2025-12-30"
+        },
+        ">3M": {
+          "median": 3790000.0,
+          "yoy": -0.03192848020434225,
+          "anchor_date": "2025-12-29"
+        }
+      }
+    },
+    "nsw_unit_3m": {
+      "level": "NSW",
+      "regions": [
+        "NSW"
+      ],
+      "dwelling": "UNIT",
+      "preset": "3 Month",
+      "band_rows": 104975,
+      "chart_rows": 1580,
+      "chart_min_date": "2026-01-16",
+      "chart_max_date": "2026-04-15",
+      "summary": {
+        "<750k": {
+          "median": 595000.0,
+          "yoy": 0.0,
+          "anchor_date": "2026-03-17"
+        },
+        "750k-1.2M": {
+          "median": 890000.0,
+          "yoy": 0.0012510012510011936,
+          "anchor_date": "2026-03-18"
+        },
+        "1.2M-2M": {
+          "median": 1420000.0,
+          "yoy": -0.015256588072122046,
+          "anchor_date": "2026-03-16"
+        },
+        "2M-3M": {
+          "median": 2300000.0,
+          "yoy": -0.016042780748663055,
+          "anchor_date": "2026-03-09"
+        },
+        ">3M": {
+          "median": 3600000.0,
+          "yoy": -0.11111111111111116,
+          "anchor_date": "2025-12-29"
+        }
+      }
+    },
+    "greater_sydney_house_3m": {
+      "level": "REGION",
+      "regions": [
+        "Greater Sydney"
+      ],
+      "dwelling": "HOUSE",
+      "preset": "3 Month",
+      "band_rows": 106555,
+      "chart_rows": 1745,
+      "chart_min_date": "2026-01-16",
+      "chart_max_date": "2026-04-16",
+      "summary": {
+        "<750k": {
+          "median": 575000.0,
+          "yoy": -0.11538461538461542,
+          "anchor_date": "2026-03-12"
+        },
+        "750k-1.2M": {
+          "median": 1000000.0,
+          "yoy": 0.02564102564102555,
+          "anchor_date": "2026-03-08"
+        },
+        "1.2M-2M": {
+          "median": 1450000.0,
+          "yoy": -0.033333333333333326,
+          "anchor_date": "2026-03-09"
+        },
+        "2M-3M": {
+          "median": 2400000.0,
+          "yoy": 0.0,
+          "anchor_date": "2025-12-29"
+        },
+        ">3M": {
+          "median": 3780000.0,
+          "yoy": -0.041800806104083765,
+          "anchor_date": "2025-12-26"
+        }
+      }
+    },
+    "greater_sydney_unit_3m": {
+      "level": "REGION",
+      "regions": [
+        "Greater Sydney"
+      ],
+      "dwelling": "UNIT",
+      "preset": "3 Month",
+      "band_rows": 104270,
+      "chart_rows": 1560,
+      "chart_min_date": "2026-01-16",
+      "chart_max_date": "2026-04-15",
+      "summary": {
+        "<750k": {
+          "median": 614950.0,
+          "yoy": 0.0081147540983606,
+          "anchor_date": "2026-03-16"
+        },
+        "750k-1.2M": {
+          "median": 900000.0,
+          "yoy": 0.011235955056179803,
+          "anchor_date": "2026-03-16"
+        },
+        "1.2M-2M": {
+          "median": 1450000.0,
+          "yoy": 0.0,
+          "anchor_date": "2026-03-15"
+        },
+        "2M-3M": {
+          "median": 2300000.0,
+          "yoy": -0.01498929336188437,
+          "anchor_date": "2026-03-11"
+        },
+        ">3M": {
+          "median": 3640000.0,
+          "yoy": -0.032558139534883734,
+          "anchor_date": "2025-12-29"
+        }
+      }
+    },
+    "region16_canterbury_bankstown_unit_3m": {
+      "level": "REGION16",
+      "regions": [
+        "Canterbury-Bankstown"
+      ],
+      "dwelling": "UNIT",
+      "preset": "3 Month",
+      "band_rows": 23505,
+      "chart_rows": 345,
+      "chart_min_date": "2026-01-14",
+      "chart_max_date": "2026-03-23",
+      "summary": {
+        "<750k": {
+          "median": 597000.0,
+          "yoy": 0.06509667491804372,
+          "anchor_date": "2026-03-11"
+        },
+        "750k-1.2M": {
+          "median": 955000.0,
+          "yoy": 0.10660486674391656,
+          "anchor_date": "2026-02-26"
+        },
+        "1.2M-2M": {
+          "median": 1260000.0,
+          "yoy": 0.024390243902439046,
+          "anchor_date": "2025-11-29"
+        }
+      }
+    },
+    "area_suburb_coffs_harbour_house_3m": {
+      "level": "AREA",
+      "regions": [
+        "Coffs Harbour"
+      ],
+      "dwelling": "HOUSE",
+      "preset": "3 Month",
+      "band_rows": 12670,
+      "chart_rows": 165,
+      "chart_min_date": "2026-01-16",
+      "chart_max_date": "2026-03-20",
+      "summary": {
+        "<750k": {
+          "median": 657500.0,
+          "yoy": -0.0037878787878787845,
+          "anchor_date": "2025-10-24"
+        },
+        "750k-1.2M": {
+          "median": 840000.0,
+          "yoy": 0.024390243902439046,
+          "anchor_date": "2026-03-11"
+        },
+        "1.2M-2M": {
+          "median": 1500000.0,
+          "yoy": "no_prior_stable_match",
+          "anchor_date": "2026-01-16"
+        }
+      }
+    },
+    "area_postcode_2450_house_3m": {
+      "level": "AREA",
+      "regions": [
+        "2450"
+      ],
+      "dwelling": "HOUSE",
+      "preset": "3 Month",
+      "band_rows": 20650,
+      "chart_rows": 300,
+      "chart_min_date": "2026-01-16",
+      "chart_max_date": "2026-03-20",
+      "summary": {
+        "<750k": {
+          "median": 605000.0,
+          "yoy": -0.07279693486590033,
+          "anchor_date": "2026-03-04"
+        },
+        "750k-1.2M": {
+          "median": 865000.0,
+          "yoy": 0.0,
+          "anchor_date": "2026-03-11"
+        },
+        "1.2M-2M": {
+          "median": 1575000.0,
+          "yoy": 0.13309352517985618,
+          "anchor_date": "2026-02-27"
+        },
+        "2M-3M": {
+          "median": 2500000.0,
+          "yoy": 0.08695652173913038,
+          "anchor_date": "2026-03-09"
+        },
+        ">3M": {
+          "median": 3000000.0,
+          "yoy": "no_prior_stable_match",
+          "anchor_date": "2025-06-24"
+        }
+      }
+    },
+    "greater_sydney_house_1y": {
+      "level": "REGION",
+      "regions": [
+        "Greater Sydney"
+      ],
+      "dwelling": "HOUSE",
+      "preset": "1 Year",
+      "band_rows": 106555,
+      "chart_rows": 8345,
+      "chart_min_date": "2025-04-16",
+      "chart_max_date": "2026-04-16",
+      "summary": {
+        "<750k": {
+          "median": 575000.0,
+          "yoy": -0.11538461538461542,
+          "anchor_date": "2026-03-12"
+        },
+        "750k-1.2M": {
+          "median": 1000000.0,
+          "yoy": 0.02564102564102555,
+          "anchor_date": "2026-03-08"
+        },
+        "1.2M-2M": {
+          "median": 1450000.0,
+          "yoy": -0.033333333333333326,
+          "anchor_date": "2026-03-09"
+        },
+        "2M-3M": {
+          "median": 2400000.0,
+          "yoy": 0.0,
+          "anchor_date": "2025-12-29"
+        },
+        ">3M": {
+          "median": 3780000.0,
+          "yoy": -0.041800806104083765,
+          "anchor_date": "2025-12-26"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+region_id,region_key,region_name,postcode_only_suburbs,extra_suburbs_if_postcode_only,mapping_rows,delta_vs_mapping
+1,cbd_inner_city,CBD / Inner City,16,0,16,0
+2,inner_south,Inner South,9,0,9,0
+3,eastern_suburbs,Eastern Suburbs,17,0,17,0
+4,inner_west,Inner West,5,0,5,0
+5,lower_north_shore,Lower North Shore,13,0,13,0
+6,upper_north_shore,Upper North Shore,13,0,13,0
+7,northern_beaches,Northern Beaches,6,0,6,0
+8,hills_district,Hills District,6,0,6,0
+9,ryde_northern_suburbs,Ryde / Northern Suburbs,10,0,10,0
+10,parramatta_central_west,Parramatta / Central West,15,0,15,0
+11,western_sydney,Western Sydney,22,0,22,0
+12,canterbury_bankstown,Canterbury-Bankstown,5,0,5,0
+13,st_george,St George,12,0,12,0
+14,south_west_sydney,South West Sydney,18,0,18,0
+15,macarthur,Macarthur,32,0,32,0
+16,sutherland_shire,Sutherland Shire,14,0,14,0
+17,forest_district,Forest District,5,0,5,0

@@ -1,0 +1,38 @@
+{
+  "region_name": [
+    "CBD / Inner City",
+    "Canterbury-Bankstown",
+    "Eastern Suburbs",
+    "Hills District",
+    "Inner South",
+    "Inner West",
+    "Lower North Shore",
+    "Macarthur",
+    "Northern Beaches",
+    "Parramatta / Central West",
+    "Ryde / Northern Suburbs",
+    "South West Sydney",
+    "St George",
+    "Sutherland Shire",
+    "Upper North Shore",
+    "Western Sydney"
+  ],
+  "region_key": [
+    "cbd_inner_city",
+    "canterbury_bankstown",
+    "eastern_suburbs",
+    "hills_district",
+    "inner_south",
+    "inner_west",
+    "lower_north_shore",
+    "macarthur",
+    "northern_beaches",
+    "parramatta_central_west",
+    "ryde_northern_suburbs",
+    "south_west_sydney",
+    "st_george",
+    "sutherland_shire",
+    "upper_north_shore",
+    "western_sydney"
+  ]
+}

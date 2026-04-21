@@ -1,4 +1,5 @@
 import json
+import hashlib
 from html import escape
 from pathlib import Path
 
@@ -8,8 +9,8 @@ import polars as pl
 import streamlit as st
 
 from utils.charts import DISPLAY_MODE_DUAL, DISPLAY_MODE_LONG, DISPLAY_MODE_SHORT, build_band_chart, build_interactive_chart
-from utils.config import BASE_DIR, IS_EXTERNAL_MODE
-from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales
+from utils.config import BASE_DIR
+from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, _expand_region16_segments_daily, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales
 from utils.i18n import ensure_lang, t, tr
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_float0, fmt_int, fmt_pct
@@ -43,6 +44,7 @@ PRICE_BANDS = [
     (3_000_000, float("inf"), ">3M"),
 ]
 BAND_NAMES = [band[2] for band in PRICE_BANDS]
+MARKET_VIEW_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
 STABLE_RATIO = 0.55
 LONG_TREND_MIN_MEDIAN_SALES = 20
 LOWER_GEO_LONG_TREND_MIN_MEDIAN_SALES = 5
@@ -52,9 +54,6 @@ REGION16_SEGMENTED_REGIONS = {
     "Lower North Shore — Extended",
     "Upper North Shore — Core",
     "Upper North Shore — Extended",
-}
-MARKET_VIEW_ANCHOR_OVERRIDE_DATES = {
-    ("REGION", "Greater Sydney", "HOUSE"): pd.Timestamp("2026-01-01"),
 }
 TIME_OPTIONS = ["1 Month", "3 Month", "6 Month", "YTD", "1 Year", "3 Year", "5 Year", "10 Year", "Max"]
 def _display_mode_labels() -> dict[str, str]:
@@ -650,6 +649,32 @@ def _format_currency(value) -> str:
     return f"${fmt_float0(value)}"
 
 
+def _market_region_label() -> str:
+    return tr("\u5e02\u573a\u533a\u57df", "Market Region")
+
+
+def _data_level_option_label(level: str) -> str:
+    return {
+        "NSW": "NSW",
+        "REGION": t("region"),
+        "REGION16": _market_region_label(),
+        "AREA": "Suburb / Postcode",
+    }.get(level, level)
+
+
+def _region_selector_label(level: str) -> str:
+    return _market_region_label() if str(level or "").strip().upper() == "REGION16" else t("region")
+
+
+def _level_label(level: str) -> str:
+    return {
+        "NSW": "NSW",
+        "REGION": t("region"),
+        "REGION16": _market_region_label(),
+        "AREA": "Suburb / Postcode",
+    }.get(level, level)
+
+
 def _trend_pill(value) -> str:
     if value is None or pd.isna(value):
         return '<span class="mv-pill mv-pill-flat">N/A</span>'
@@ -790,14 +815,6 @@ def _resolve_latest_stable_anchor(plot_df_all: pd.DataFrame) -> dict[str, object
     }
 
 
-def _resolve_market_view_anchor_override(level: str, region: str, dwelling: str) -> pd.Timestamp | None:
-    key = (str(level or "").strip().upper(), str(region or "").strip(), str(dwelling or "").strip().upper())
-    value = MARKET_VIEW_ANCHOR_OVERRIDE_DATES.get(key)
-    if value is None:
-        return None
-    return pd.to_datetime(value, errors="coerce").normalize()
-
-
 def _resolve_visible_stable_chart_anchor(
     plot_df_all: pd.DataFrame,
     *,
@@ -822,23 +839,6 @@ def _resolve_visible_stable_chart_anchor(
     required_series = required_series[required_series[visible_series].notna()].copy()
     if required_series.empty:
         return None
-
-    region_value = str(required_series["region"].iloc[0]) if "region" in required_series.columns and not required_series.empty else ""
-    override_date = _resolve_market_view_anchor_override(level, region_value, dwelling)
-    if override_date is not None:
-        override_row = required_series[required_series["event_time"] == override_date].copy()
-        if not override_row.empty:
-            chosen = override_row.sort_values("event_time").iloc[-1]
-            return {
-                "date": pd.to_datetime(chosen["event_time"], errors="coerce").normalize(),
-                "plotted_value": chosen[visible_series],
-                "raw_value": chosen["value"],
-                "sales": chosen.get("sales_28d"),
-                "stable": bool(chosen.get("stable", False)),
-                "region": chosen.get("region"),
-                "series_name": visible_series,
-                "transformed": visible_series != "value",
-            }
 
     stable_frame = required_series[required_series["stable"].fillna(False)].copy()
     if stable_frame.empty:
@@ -1175,7 +1175,7 @@ def _render_main_kpis_clean(metrics: dict[str, object], region_label: str, prese
         with st.container(border=True):
             st.caption(t("stable_yoy"))
             st.markdown(f"### {yoy_text}")
-            st.caption(t("vs_same_date_last_year"))
+            st.caption(tr("相对最近的去年稳定匹配点", "Relative to the nearest stable prior-year match"))
 
     if latest_available_point and latest_available_point != latest_point:
         st.caption(t("market_view_stability_note"))
@@ -1195,18 +1195,103 @@ def _render_main_kpis_clean(metrics: dict[str, object], region_label: str, prese
             with col_high:
                 st.caption(t("max_value"))
                 st.markdown(f"**{range_high}**")
-            st.caption(tr("当前区域稳定价格范围", "Current stable price range for this area"))
+            st.caption(tr("所选时间范围内稳定中位价范围", "Stable median range within the selected time window"))
     with c5:
         with st.container(border=True):
             st.caption(t("sales_28d"))
             st.markdown(f"### {sales_text}")
             st.caption(tr("最新稳定点滚动成交", "Rolling sales at the latest stable point"))
+
+def _is_postcode_like_market_view_region(value: object) -> bool:
+    text = str(value or "").strip()
+    return len(text) == 4 and text.isdigit()
+
+
+def _scope_price_band_fact_sales(level: str, regions_selected: list[str], dwelling: str) -> pl.DataFrame:
+    fact = load_filtered_fact_sales()
+    if fact.is_empty():
+        return pl.DataFrame()
+
+    fact = fact.filter(
+        pl.col("dwelling_group") == dwelling,
+        pl.col("purchase_price").is_not_null(),
+        pl.col("purchase_price") >= ANALYTICS_PRICE_MIN,
+        pl.col("purchase_price") <= ANALYTICS_PRICE_MAX,
+    )
+    if fact.is_empty():
+        return pl.DataFrame()
+
+    normalized_level = str(level or "").strip().upper()
+    normalized_regions = [str(region).strip() for region in regions_selected if str(region).strip()]
+
+    if normalized_level == "NSW":
+        return fact
+
+    if normalized_level == "REGION":
+        dim_gccsa = load_dim_postcode_gccsa()
+        if dim_gccsa.is_empty():
+            return pl.DataFrame()
+        scoped = (
+            fact.join(
+                dim_gccsa
+                .filter(pl.col("region_group").is_in(list(MARKET_VIEW_REGION_GROUPS)))
+                .select(["postcode", "region_group"])
+                .unique(subset=["postcode"]),
+                on="postcode",
+                how="inner",
+            )
+            .with_columns(pl.col("region_group").alias("region"))
+        )
+    elif normalized_level == "REGION16":
+        dim_region16 = load_dim_region16()
+        if dim_region16.is_empty():
+            return pl.DataFrame()
+        scoped = fact.join(
+            dim_region16.select(["postcode", "region_name"]).unique(subset=["postcode"]),
+            on="postcode",
+            how="inner",
+        )
+        scoped = _expand_region16_segments_daily(scoped)
+        scoped = scoped.with_columns(pl.col("region_name").alias("region"))
+    elif normalized_level == "AREA":
+        if not normalized_regions:
+            return pl.DataFrame()
+        if all(_is_postcode_like_market_view_region(region) for region in normalized_regions):
+            scoped = fact.with_columns(pl.col("postcode").alias("region")).filter(pl.col("postcode") != "")
+        else:
+            normalized_suburbs = [region.upper() for region in normalized_regions]
+            scoped = (
+                fact.with_columns(pl.col("suburb").str.to_uppercase().alias("region"))
+                .filter(pl.col("suburb") != "")
+            )
+            normalized_regions = normalized_suburbs
+    else:
+        return pl.DataFrame()
+
+    if normalized_regions:
+        scoped = scoped.filter(pl.col("region").is_in(normalized_regions))
+
+    return scoped.select(["suburb", "postcode", "date", "purchase_price", "dwelling_group"])
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def _price_band_cache_paths(dwelling: str) -> tuple[Path, Path]:
+def _price_band_cache_paths(level: str, dwelling: str, regions_selected: tuple[str, ...]) -> tuple[Path, Path]:
     cache_dir = BASE_DIR / "data" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    slug = str(dwelling).strip().lower()
-    return cache_dir / f"market_view_price_band_{slug}.parquet", cache_dir / f"market_view_price_band_{slug}.meta.json"
+    scope_payload = json.dumps(
+        {
+            "level": str(level or "").strip().upper(),
+            "dwelling": str(dwelling or "").strip().upper(),
+            "regions": [str(region).strip() for region in regions_selected],
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+    scope_hash = hashlib.sha1(scope_payload.encode("utf-8")).hexdigest()[:12]
+    return (
+        cache_dir / f"market_view_price_band_{scope_hash}.parquet",
+        cache_dir / f"market_view_price_band_{scope_hash}.meta.json",
+    )
 
 
 def _compute_price_band_data(fact: pl.DataFrame) -> pl.DataFrame:
@@ -1253,21 +1338,15 @@ def _compute_price_band_data(fact: pl.DataFrame) -> pl.DataFrame:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_price_band_data(dwelling: str) -> pl.DataFrame:
-    fact = load_filtered_fact_sales()
+def load_price_band_data(level: str, regions_selected: tuple[str, ...], dwelling: str) -> pl.DataFrame:
+    fact = _scope_price_band_fact_sales(level, list(regions_selected), dwelling)
     if fact.is_empty():
         return pl.DataFrame()
-    fact = fact.filter(
-        pl.col("dwelling_group") == dwelling,
-        pl.col("purchase_price").is_not_null(),
-        pl.col("purchase_price") >= ANALYTICS_PRICE_MIN,
-        pl.col("purchase_price") <= ANALYTICS_PRICE_MAX,
-    )
-    if fact.is_empty():
-        return pl.DataFrame()
-    cache_path, meta_path = _price_band_cache_paths(dwelling)
+    cache_path, meta_path = _price_band_cache_paths(level, dwelling, regions_selected)
     signature = {
+        "level": str(level or "").strip().upper(),
         "dwelling": str(dwelling),
+        "regions": [str(region).strip() for region in regions_selected],
         "rows": int(fact.height),
         "max_date": str(fact["date"].max()),
     }
@@ -1447,7 +1526,7 @@ def _resolve_external_dwelling_state(default_dwelling: str) -> str:
 
 
 def _render_page_filter_bar(min_date, max_date):
-    filter_cols = st.columns([1.5, 1.3, 1.1] if not IS_EXTERNAL_MODE else [1.7, 1.5])
+    filter_cols = st.columns([1.7, 1.5])
     with filter_cols[0]:
         st.markdown(f'<div class="mv-filter-label">{escape(t("time_range"))}</div>', unsafe_allow_html=True)
         default_preset = TIME_OPTIONS.index("1 Year") if "1 Year" in TIME_OPTIONS else 0
@@ -1455,13 +1534,15 @@ def _render_page_filter_bar(min_date, max_date):
     start_ts, end_ts = _preset_start_end(min_date, max_date, preset)
     with filter_cols[1]:
         st.markdown(f'<div class="mv-filter-label">{escape(t("data_level"))}</div>', unsafe_allow_html=True)
-        level = st.selectbox(t("data_level"), ["NSW", "REGION", "REGION16", "AREA"], index=0, key="mv_level", label_visibility="collapsed")
-    stable_ratio = STABLE_RATIO
-    if not IS_EXTERNAL_MODE:
-        with filter_cols[2]:
-            st.markdown(f'<div class="mv-filter-label">{escape(t("stable_ratio"))}</div>', unsafe_allow_html=True)
-            stable_ratio = st.slider(t("stable_ratio"), 0.0, 1.0, STABLE_RATIO, 0.05, key="mv_stable_ratio", label_visibility="collapsed")
-    return level, preset, start_ts, end_ts, stable_ratio
+        level = st.selectbox(
+            t("data_level"),
+            ["NSW", "REGION", "REGION16", "AREA"],
+            index=0,
+            key="mv_level",
+            label_visibility="collapsed",
+            format_func=_data_level_option_label,
+        )
+    return level, preset, start_ts, end_ts, STABLE_RATIO
 
 
 def _build_band_chart_frame(filtered: pl.DataFrame, stable_ratio: float) -> pd.DataFrame:
@@ -1670,10 +1751,9 @@ def main():
     _inject_market_view_css()
 
     with st.sidebar:
-        opts = sidebar_common(include_dwelling=not IS_EXTERNAL_MODE)
+        opts = sidebar_common(include_dwelling=False)
     dwelling = opts["dwelling"]
-    if IS_EXTERNAL_MODE:
-        dwelling = _resolve_external_dwelling_state(dwelling)
+    dwelling = _resolve_external_dwelling_state(dwelling)
 
     with perf.track("source_data_load"):
         seed_daily = load_daily_rolling("NSW")
@@ -1683,8 +1763,7 @@ def main():
     min_date = seed_daily["date"].min()
     max_date = seed_daily["date"].max()
     _render_topbar(max_date)
-    if IS_EXTERNAL_MODE:
-        dwelling = _render_external_dwelling_switch(dwelling)
+    dwelling = _render_external_dwelling_switch(dwelling)
     level, preset, start_ts, end_ts, stable_ratio = _render_page_filter_bar(min_date, max_date)
     _normalize_display_mode_state("mv_chart_display_mode")
     chart_display_mode = _coerce_display_mode(st.session_state.get("mv_chart_display_mode"))
@@ -1772,13 +1851,14 @@ def main():
                 unsafe_allow_html=True,
             )
             with header_cols[1]:
-                st.markdown(f'<div class="mv-filter-label">{escape(t("region"))}</div>', unsafe_allow_html=True)
+                selector_label = _region_selector_label(level)
+                st.markdown(f'<div class="mv-filter-label">{escape(selector_label)}</div>', unsafe_allow_html=True)
                 if level == "NSW":
-                    st.text_input(t("region"), value="NSW", disabled=True, label_visibility="collapsed", key="mv_chart_region_nsw")
+                    st.text_input(selector_label, value="NSW", disabled=True, label_visibility="collapsed", key="mv_chart_region_nsw")
                 elif level in {"REGION", "REGION16"}:
-                    st.selectbox(t("region"), options=region_options, key=f"mv_chart_region_{level.lower()}", label_visibility="collapsed")
+                    st.selectbox(selector_label, options=region_options, key=f"mv_chart_region_{level.lower()}", label_visibility="collapsed")
                 else:
-                    st.selectbox(t("region"), options=region_options, key="mv_chart_region_area", label_visibility="collapsed", placeholder=t("search_suburb_or_postcode"))
+                    st.selectbox(selector_label, options=region_options, key="mv_chart_region_area", label_visibility="collapsed", placeholder=t("search_suburb_or_postcode"))
             with header_cols[2]:
                 st.markdown(f'<div class="mv-filter-label">{escape(t("display_mode"))}</div>', unsafe_allow_html=True)
                 _normalize_display_mode_state("mv_chart_display_mode")
@@ -1832,7 +1912,7 @@ def main():
         band_card = st.container(border=True)
         with band_card:
             with perf.track("band_data_load"):
-                band_data = load_price_band_data(dwelling)
+                band_data = load_price_band_data(level, tuple(regions_selected), dwelling)
             st.markdown(
                 f'<div class="mv-section-title">{escape(t("price_band_trend"))}</div>'
                 f'<div class="mv-section-subtitle">{escape(t("price_band_trend_note"))}</div>',
@@ -1886,7 +1966,10 @@ def main():
                     )
                     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
                     shown_bands = [band for band in selected_bands if band in band_summary["band"].tolist()]
-                    st.markdown(f'<div class="mv-band-summary-descriptor">{escape(t("all_price_bands_yoy"))}</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="mv-band-summary-descriptor">{escape(tr("各价格带最新稳定中位价与稳定同比", "Latest stable median and stable YoY by price band"))}</div>',
+                        unsafe_allow_html=True,
+                    )
                     band_cols = st.columns(max(len(shown_bands), 1))
                     for col, band in zip(band_cols, shown_bands):
                         row = band_summary[band_summary["band"] == band]
@@ -1898,7 +1981,7 @@ def main():
                               <div class="mv-band-label">{escape(band)}</div>
                               <div class="mv-band-value">{escape(_format_currency(median))}</div>
                               <div class="mv-band-yoy-row">{_band_yoy_pill_html(yoy)}</div>
-                              <div class="mv-band-summary-sub">{escape(t("vs_same_date_last_year"))}</div>
+                              <div class="mv-band-summary-sub">{escape(tr("相对最近的去年稳定匹配点", "Relative to the nearest stable prior-year match"))}</div>
                             </div>
                             """,
                             unsafe_allow_html=True,
@@ -1908,6 +1991,6 @@ def main():
         level=level,
         region_count=int(len(regions_selected)),
     )
-    render_internal_timing_summary(timing_payload, enabled=not IS_EXTERNAL_MODE)
+    render_internal_timing_summary(timing_payload, enabled=False)
 if __name__ == "__main__":
     main()
