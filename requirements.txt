@@ -4,3 +4,4 @@ polars>=1.26,<2
 plotly>=5.24,<6
 numpy>=1.26,<3
 pyarrow>=18,<22
+matplotlib>=3.8,<4
