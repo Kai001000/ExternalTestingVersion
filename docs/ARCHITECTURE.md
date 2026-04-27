@@ -25,6 +25,8 @@ utils/
   metrics.py
   map_view.py
   i18n.py
+  ui.py
+  ui_style.py
   ranking_view.py
   config.py
   perf.py
@@ -41,6 +43,11 @@ utils/
 - page timing logs: `logs/page_timings.jsonl`
 - performance instrumentation is an implementation/operations aid, not a product-behavior contract
 
+## Shared UI Layer
+- `utils/ui.py` owns shared theme injection and common sidebar/header hooks
+- `utils/ui_style.py` owns shared internal visual tokens and reusable presentation helpers such as hero blocks, card shells, filter-panel wrappers, and semantic chip styles
+- shared UI helpers are presentation-only and must not become a second source of truth for metrics, filter state, map state, shortlist state, or report logic
+
 ## Page and Module Responsibilities
 ### Market View
 Responsibilities:
@@ -48,6 +55,7 @@ Responsibilities:
 - stability-aware KPI display
 - price-band trend display
 - geography/dwelling/time-range controls
+- internal presentation may reuse the shared hero/filter/card system while preserving the existing KPI, chart, and price-band data paths
 
 Key dependencies:
 - daily rolling marts
@@ -67,12 +75,14 @@ Responsibilities:
 - suburb focus and listing browser behavior
 - sale map/list interaction
 - sale PDF/report workflows where enabled
+- internal presentation may reuse shared UI helpers, but the page must continue to own its canonical sale filtered dataset and report context path
 
 ### Rent Budget
 Responsibilities:
 - rent listing filtering
 - suburb focus and listing browser behavior
 - rent map/list interaction
+- internal presentation may reuse shared UI helpers, but the page must continue to own its canonical rent filtered dataset and must not mix sale/rent pipelines
 
 ## State Model
 Canonical page-state layers:
@@ -123,3 +133,4 @@ State-model rules:
 - external layout/state work should preserve a single source of truth for filtered scope, focused suburb, and selected listing
 - external mode should continue to use the single-map path for listing selection rather than duplicate map render paths
 - external visible controls must remain the effective source of truth and must not be shadowed by hidden legacy state
+- the shared theme injector currently applies globally; future cleanup may narrow internal-only styling more explicitly, but public restrictions must remain mode-gated rather than style-gated

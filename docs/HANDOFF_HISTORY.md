@@ -13,6 +13,57 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-04-26 - Internal UI Refactor Baseline + Shared Visual System
+
+Context: internal UI presentation refresh | shared styling layer | Market View + Buy + Rent alignment
+
+Changes:
+- Added a shared internal visual system through `utils/ui_style.py`, including reusable hero, card, filter-panel, chip, and semantic-tone styling.
+- Updated the shared theme entry path in `utils/ui.py` so the common theme injector applies the new shared visual layer.
+- Refreshed internal presentation on:
+  - Market View
+  - Buy Budget
+  - Rent Budget
+- Kept the session within a UI-only boundary: presentation changed, but metrics, filtering, state, map behavior, shortlist behavior, report calculations, and public restrictions were preserved.
+
+Validation summary:
+- `py_compile` completed for the touched pages and shared helpers.
+- Streamlit/AppTest render checks completed for:
+  - External Home
+  - Market View
+  - Buy Budget
+  - Rent Budget
+- Market View spot-checks confirmed no change to latest stable median, latest stable date, stable YoY, or price-band outputs for:
+  - `NSW / HOUSE`
+  - `Greater Sydney / HOUSE`
+  - `Forest District / HOUSE`
+  - `NSW / UNIT`
+- Buy validation confirmed:
+  - filter/search render path still works
+  - focused-suburb and selected-listing state rules still hold
+  - shortlist add/remove still works
+  - sale report PDF generation still works without leaking raw local/debug paths
+- Rent validation confirmed:
+  - search submit with changed weekly-rent range still works
+  - focused-suburb and selected-listing state rules still hold
+  - shortlist add/remove still works
+- External/public smoke checks confirmed:
+  - external homepage still renders
+  - public restriction gates still hold
+  - property-type labels in public Buy/Rent still hide numeric counts
+
+Rules promoted:
+- Visual refactors may change presentation hierarchy and shared styling structure, but must not change product behavior, calculations, state ownership, map semantics, report semantics, or public restriction behavior.
+- Shared UI helpers must remain presentation-only and must not become a hidden logic layer.
+
+Known technical debt:
+- `inject_app_theme()` currently applies globally rather than through a narrower internal-only theme boundary.
+- Legacy page-local CSS remains in the homepage, Market View, Buy, and Rent pages.
+- Some page styling remains duplicated and should be consolidated later into shared helpers/tokens.
+- Non-blocking warnings remain:
+  - Streamlit `use_container_width` deprecation warnings
+  - pandas `fillna` future warning in Market View
+
 The content below is preserved from the prior `MASTER_SPEC.md` handoff/history section so the dated record and session rationale are not lost.
 ### 2026-04-21 — Rent UX Alignment To Sale + Public Report Placeholder Buttons
 

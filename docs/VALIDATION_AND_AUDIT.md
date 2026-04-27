@@ -17,6 +17,19 @@ References:
 - [ ] No active rule required for the change exists only in `HANDOFF_HISTORY.md`.
 - [ ] No visible label contradicts the actual implemented logic.
 
+## UI Refactor Checklist
+Use this when the session goal is presentation-only:
+- [ ] Shared visual tokens/classes were used where practical instead of adding large new page-local CSS blocks
+- [ ] Any new shared UI helper remained presentation-only and did not absorb product logic
+- [ ] Metric formulas remained unchanged
+- [ ] Filtering semantics remained unchanged
+- [ ] State ownership remained unchanged
+- [ ] Map interaction semantics remained unchanged
+- [ ] Shortlist identity/state semantics remained unchanged
+- [ ] Report calculation inputs and outputs remained unchanged
+- [ ] Public/external restriction gates remained unchanged
+- [ ] Validation included render checks plus at least one behavior smoke test for each touched workflow
+
 ## External Validation Matrix
 Run these whenever external behavior changes:
 - [ ] External homepage renders and appears first in navigation
@@ -54,6 +67,7 @@ For each validated path:
 - [ ] `REGION / Greater Sydney / HOUSE` does not use the removed `2026-01-01` anchor override
 - [ ] Forest District appears as a selectable Market Region
 - [ ] Forest District Market View scope renders without exception for both `HOUSE` and `UNIT`
+- [ ] Presentation-only changes do not alter latest stable median, latest stable date, stable YoY, or price-band outputs for the audited spot-check cases
 
 ## Market Region Validation
 - [ ] Region exists in the canonical Market Region mapping
@@ -73,6 +87,8 @@ For each validated path:
 - [ ] Browser rows recompute from the latest focused suburb after map interaction
 - [ ] Listing selection remains subordinate to focused suburb
 - [ ] Shortlist behavior matches the canonical sale listing identity/state model
+- [ ] Sale report generation still works for at least one shortlisted listing after the change
+- [ ] Sale report still matches the selected listing and active sale page dataset
 
 ## Rent Checklist
 - [ ] Rent filters apply correctly to the canonical rent filtered dataset
@@ -83,6 +99,7 @@ For each validated path:
 - [ ] Focused suburb does not redefine the global filtered universe
 - [ ] Browser rows recompute from the latest focused suburb after map interaction
 - [ ] Listing selection remains subordinate to focused suburb
+- [ ] Rent search submit still works with an updated weekly rent range after the change
 
 ## Buy / Rent Parity Checklist
 - [ ] Buy and Rent use consistent filter semantics where parity is required
@@ -115,6 +132,7 @@ For each validated path:
 - [ ] External mode differs only through explicit public restrictions, not through a second hidden baseline
 - [ ] Buy external property-type labels do not expose numeric counts
 - [ ] Rent external property-type labels do not expose numeric counts
+- [ ] No raw debug/data/export exposure was introduced in external/public visible UI
 
 ## Data Pipeline Checklist
 - [ ] Required update/rebuild script completed without crash

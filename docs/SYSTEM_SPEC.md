@@ -84,6 +84,10 @@ External rent listing behavior:
 - sort numeric rent rows ahead of non-numeric rows
 
 ## Listing UI Baseline
+Presentation rules:
+- visual refactors may change hierarchy, spacing, wrappers, and shared styling helpers
+- visual refactors must remain UI-only and must not change metric formulas, filtering semantics, state ownership, map interaction rules, shortlist identity/state rules, report calculations, or public restriction behavior
+
 ### Sale Columns
 - Price
 - Address
