@@ -1600,6 +1600,45 @@ def _ensure_default_region(level: str, region_options: list[str]):
         st.session_state[key] = region_options[0]
 
 
+def _prepare_region_selector_state(
+    level: str,
+    *,
+    dwelling: str,
+    start_ts: pd.Timestamp,
+    end_ts: pd.Timestamp,
+) -> tuple[list[str], dict[str, str]]:
+    daily = _load_level_daily(level)
+    if daily.is_empty():
+        return [], {}
+
+    daily = daily.with_columns(pl.col("region").cast(pl.Utf8).str.strip_chars())
+    region_options, region_value_map = _resolve_region_options(level, daily)
+    _ensure_default_region(level, region_options)
+
+    if level == "AREA" and region_options:
+        area_key = "mv_chart_region_area"
+        if not _area_label_has_visible_rows(
+            daily,
+            region_value_map,
+            st.session_state.get(area_key),
+            dwelling=dwelling,
+            start_ts=start_ts,
+            end_ts=end_ts,
+        ):
+            default_label = _pick_default_area_label(
+                daily,
+                region_options,
+                region_value_map,
+                dwelling=dwelling,
+                start_ts=start_ts,
+                end_ts=end_ts,
+            )
+            if default_label:
+                st.session_state[area_key] = default_label
+
+    return region_options, region_value_map
+
+
 def _pick_default_area_label(
     daily: pl.DataFrame,
     region_options: list[str],
@@ -1739,9 +1778,6 @@ def _render_market_control_panel(
     current_dwelling: str,
     min_date,
     max_date,
-    *,
-    level: str,
-    region_options: list[str],
 ):
     with st.container(border=True):
         st.markdown(
@@ -1754,6 +1790,12 @@ def _render_market_control_panel(
             dwelling = _render_external_dwelling_switch(current_dwelling)
         with control_cols[1]:
             level, preset, start_ts, end_ts, stable_ratio = _render_page_filter_bar(min_date, max_date)
+        region_options, _ = _prepare_region_selector_state(
+            level,
+            dwelling=dwelling,
+            start_ts=start_ts,
+            end_ts=end_ts,
+        )
         with control_cols[2]:
             selector_label = _region_selector_label(level)
             st.markdown(f'<div class="mv-filter-label">{escape(selector_label)}</div>', unsafe_allow_html=True)
@@ -2023,8 +2065,6 @@ def main():
         dwelling,
         min_date,
         max_date,
-        level=level,
-        region_options=region_options,
     )
     if level != str(st.session_state.get("mv_level", level)):
         level = str(st.session_state.get("mv_level", level))
@@ -2036,24 +2076,6 @@ def main():
     current_daily = current_daily.with_columns(pl.col("region").cast(pl.Utf8).str.strip_chars())
     region_options, region_value_map = _resolve_region_options(level, current_daily)
     _ensure_default_region(level, region_options)
-    if level == "AREA" and region_options:
-        area_key = "mv_chart_region_area"
-        if not _area_label_has_visible_rows(
-            current_daily,
-            region_value_map,
-            st.session_state.get(area_key),
-            dwelling=dwelling,
-            start_ts=start_ts,
-            end_ts=end_ts,
-        ):
-            st.session_state[area_key] = _pick_default_area_label(
-                current_daily,
-                region_options,
-                region_value_map,
-                dwelling=dwelling,
-                start_ts=start_ts,
-                end_ts=end_ts,
-            )
     regions_selected, region_label = _resolve_region_selection(level, region_value_map)
     with st.spinner(t("loading_market_view")):
         daily = current_daily
