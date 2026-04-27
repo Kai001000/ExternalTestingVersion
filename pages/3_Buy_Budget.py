@@ -47,7 +47,7 @@ from utils.map_view import NSW_MAP_BOUNDS, clamp_to_nsw_map_view, resolve_budget
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_int, fmt_pct
 from utils.ui import inject_app_theme, render_external_page_header, sidebar_common
-from utils.ui_style import budget_hero_block, chip_row, hero_block, section_note
+from utils.ui_style import budget_hero_block, chip_row, hero_block, section_note, simple_card
 
 
 SUBURB_JOIN_ALIASES = {
@@ -5208,6 +5208,27 @@ def _render_scope_and_selection_status(*, selected_suburb: str, selected_listing
     st.markdown(chip_row(items), unsafe_allow_html=True)
 
 
+def _render_public_access_restricted_state() -> None:
+    st.markdown(
+        simple_card(
+            title=t("public_page_restricted_title"),
+            body=t("public_page_restricted_body"),
+            variant="warning",
+        ),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        chip_row(
+            [
+                (t("public_page_restricted_home"), "neutral"),
+                (t("public_page_restricted_market"), "positive"),
+            ]
+        ),
+        unsafe_allow_html=True,
+    )
+    st.caption(t("public_page_restricted_internal"))
+
+
 def main() -> None:
     perf = PagePerf("buy_budget")
     ensure_lang()
@@ -5217,6 +5238,9 @@ def main() -> None:
     with st.sidebar:
         sidebar_common(include_dwelling=False)
     _render_buy_page_header()
+    if IS_PUBLIC_MODE:
+        _render_public_access_restricted_state()
+        return
     if False:
         render_external_page_header(
         badge=tr("Public Beta", "Public Beta"),
