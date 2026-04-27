@@ -25,7 +25,7 @@ from utils.i18n import ensure_lang, t, tr
 from utils.map_view import NSW_MAP_BOUNDS, clamp_to_nsw_map_view, resolve_budget_map_view
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.ui import inject_app_theme, render_external_page_header, sidebar_common
-from utils.ui_style import budget_hero_block, hero_block
+from utils.ui_style import budget_hero_block, chip_row, hero_block, section_note
 
 
 SUBURB_JOIN_ALIASES = {"CESSNOCK WEST": "CESSNOCK", "PATONGA BEACH": "PATONGA"}
@@ -1567,6 +1567,17 @@ def _render_external_listing_panel(listings, selected_suburb, metadata, *, brows
         return
     selected_row = _selected_listing_row(listings)
     if selected_row is not None:
+        st.markdown(
+            chip_row(
+                [
+                    (f"{t('focused_label')}: {selected_suburb}", "caution")
+                    if selected_suburb != "__ALL__"
+                    else (t("global_view_label"), "neutral"),
+                    (t("selected_property_indicator"), "positive"),
+                ]
+            ),
+            unsafe_allow_html=True,
+        )
         with st.container(height=EXTERNAL_PANEL_BODY_HEIGHT):
             _render_external_listing_detail(selected_row, listings, selected_suburb)
         return
@@ -1781,7 +1792,7 @@ def _render_external_applied_filter_summary(filters, *, rent_mode):
         f"""
         <div class="internal-insight-card">
           <div class="internal-card-title">{escape(lines[0])}</div>
-          <div class="internal-help-text" style="margin-bottom:0.55rem;">{escape(t('rent_budget_dashboard_note'))}</div>
+          <div class="internal-help-text" style="margin-bottom:0.3rem;">{escape(t('rent_budget_applied_filters_note'))}</div>
           <div>{chips}</div>
         </div>
         """,
@@ -1877,6 +1888,17 @@ def _render_rent_overview_row(insight, *, budget_min: int, budget_max: int):
                 """,
                 unsafe_allow_html=True,
             )
+
+
+def _render_scope_and_selection_status(*, selected_suburb: str, selected_listing_id: str | None) -> None:
+    items: list[tuple[str, str | None]] = []
+    if selected_suburb == "__ALL__":
+        items.append((t("global_view_label"), "neutral"))
+    else:
+        items.append((f"{t('focused_label')}: {selected_suburb}", "caution"))
+    if selected_listing_id:
+        items.append((t("selected_property_indicator"), "positive"))
+    st.markdown(chip_row(items), unsafe_allow_html=True)
 
 
 def main():
@@ -2239,21 +2261,26 @@ def main():
         with st.container(border=True):
             st.markdown(f"**{t('rent_budget_dashboard_title')}**")
             st.caption(t("rent_budget_dashboard_note"))
+            st.markdown(section_note(t("rent_budget_overview_intent")), unsafe_allow_html=True)
+            _render_scope_and_selection_status(
+                selected_suburb=selected_suburb,
+                selected_listing_id=_selected_listing_id(),
+            )
             _render_rent_overview_row(insight, budget_min=budget_min, budget_max=budget_max)
             if commute_label and not commute_notice:
                 st.markdown(f"<span class='internal-chip internal-chip-caution'>{escape(commute_label)}</span>", unsafe_allow_html=True)
             st.markdown(f"**{tr('租金结论', 'Rent conclusion')}**")
             st.write(insight["conclusion"])
-            if selected_suburb != "__ALL__":
-                st.caption(f"{tr('当前聚焦 suburb', 'Currently focused suburb')}: {selected_suburb}")
         with st.container(border=True):
             focus_cols = st.columns([2.4, 1])
             with focus_cols[0]:
                 st.markdown(f"**{tr('排序 suburb', 'Ranked Suburbs')}**")
-                st.caption(tr("先按 suburb 搜索并设置最少挂牌阈值，再通过表格聚焦地图。", "Search by suburb, apply a minimum listings threshold, then use the table to focus the map."))
+                st.caption(t("rent_budget_ranking_intent"))
             with focus_cols[1]:
-                if selected_suburb != "__ALL__":
-                    st.caption(f"{tr('当前聚焦 suburb', 'Focused suburb')}: {selected_suburb}")
+                _render_scope_and_selection_status(
+                    selected_suburb=selected_suburb,
+                    selected_listing_id=_selected_listing_id(),
+                )
             _render_suburb_ranking(focused_summary if selected_suburb != "__ALL__" else suburb_summary)
         browser_scope_mode = _browser_scope_mode()
         all_display_listings = _prepare_external_display_listings(df, sort_column=sort_column, sort_ascending=sort_ascending)
@@ -2283,6 +2310,11 @@ def main():
         with st.container(border=True):
             st.markdown(f"**{t('rent_budget_map_title')} + {t('rent_budget_browser_title')}**")
             st.caption(t("rent_budget_map_note"))
+            st.markdown(section_note(t("rent_budget_browser_intent")), unsafe_allow_html=True)
+            _render_scope_and_selection_status(
+                selected_suburb=selected_suburb,
+                selected_listing_id=_selected_listing_id(),
+            )
             map_col, panel_col = st.columns([7, 3], gap="large")
             with map_col:
                 with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):

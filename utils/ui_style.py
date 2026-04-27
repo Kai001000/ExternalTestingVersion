@@ -183,6 +183,12 @@ def internal_ui_css() -> str:
         line-height: 1.45;
         margin: 0.35rem 0 0.2rem 0;
     }
+    .internal-section-note {
+        color: var(--ui-color-text-muted);
+        font-size: 0.84rem;
+        line-height: 1.45;
+        margin: 0.25rem 0 0.7rem 0;
+    }
     .internal-badge,
     .internal-chip {
         display: inline-flex;
@@ -220,6 +226,12 @@ def internal_ui_css() -> str:
         background: var(--ui-color-accent-danger-soft);
         color: var(--ui-color-accent-danger);
         border-color: rgba(180, 35, 24, 0.12);
+    }
+    .internal-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin: 0.35rem 0 0.2rem 0;
     }
     .internal-divider {
         height: 1px;
@@ -367,3 +379,23 @@ def simple_card(*, title: str, body: str, variant: str = "default") -> str:
 
 def divider() -> str:
     return "<div class='internal-divider'></div>"
+
+
+def chip(text: str, tone: str = "neutral") -> str:
+    tone_class = {
+        "positive": "internal-chip internal-chip-positive",
+        "caution": "internal-chip internal-chip-caution",
+        "danger": "internal-chip internal-chip-danger",
+    }.get(tone, "internal-chip")
+    return f"<span class='{tone_class}'>{escape(text)}</span>"
+
+
+def chip_row(items: list[tuple[str, str | None]]) -> str:
+    body = "".join(chip(text, tone or "neutral") for text, tone in items if str(text).strip())
+    return f"<div class='internal-chip-row'>{body}</div>" if body else ""
+
+
+def section_note(text: str) -> str:
+    if not str(text).strip():
+        return ""
+    return f"<div class='internal-section-note'>{escape(text)}</div>"

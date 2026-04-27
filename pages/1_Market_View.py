@@ -15,7 +15,7 @@ from utils.i18n import ensure_lang, t, tr
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_float0, fmt_int, fmt_pct
 from utils.ui import inject_app_theme, sidebar_common
-from utils.ui_style import hero_block
+from utils.ui_style import hero_block, section_note
 
 st.markdown(
     """
@@ -1271,6 +1271,7 @@ def _render_main_kpis_phase2(metrics: dict[str, object], region_label: str, pres
         """,
         unsafe_allow_html=True,
     )
+    st.markdown(section_note(t("market_view_kpi_intent")), unsafe_allow_html=True)
 
     top_cols = st.columns(3)
     top_cards = [
@@ -2108,6 +2109,7 @@ def main():
             preset=preset,
             dwelling=dwelling,
         )
+        _render_context_strip(region_label, level, preset, dwelling)
 
         chart_card = st.container(border=False)
         with chart_card:
