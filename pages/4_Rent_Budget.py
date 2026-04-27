@@ -2,6 +2,7 @@
 import math
 import re
 from contextlib import nullcontext
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -20,10 +21,11 @@ from utils.data import (
     order_external_rent_listing_display,
     resolve_commute_origin,
 )
-from utils.i18n import ensure_lang, tr
+from utils.i18n import ensure_lang, t, tr
 from utils.map_view import NSW_MAP_BOUNDS, clamp_to_nsw_map_view, resolve_budget_map_view
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.ui import inject_app_theme, render_external_page_header, sidebar_common
+from utils.ui_style import budget_hero_block, hero_block
 
 
 SUBURB_JOIN_ALIASES = {"CESSNOCK WEST": "CESSNOCK", "PATONGA BEACH": "PATONGA"}
@@ -1770,7 +1772,111 @@ def _render_external_applied_filter_summary(filters, *, rent_mode):
     if filters.get("selected_postcodes"):
         lines.append(f"{tr('邮编', 'Postcode')}: {', '.join(filters['selected_postcodes'])}")
     lines.append(f"{tr('排序', 'Sort')}: {filters['selected_sort']}")
-    st.markdown("  \n".join([line for line in lines if line]))
+    chips = "".join(
+        f"<span class='internal-chip' style='margin:0 0.45rem 0.45rem 0;'>{escape(line)}</span>"
+        for line in lines[1:]
+        if line
+    )
+    st.markdown(
+        f"""
+        <div class="internal-insight-card">
+          <div class="internal-card-title">{escape(lines[0])}</div>
+          <div class="internal-help-text" style="margin-bottom:0.55rem;">{escape(t('rent_budget_dashboard_note'))}</div>
+          <div>{chips}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_rent_page_header() -> None:
+    badge = t("rent_budget_mode_public") if IS_PUBLIC_MODE else t("rent_budget_mode_internal")
+    note = t("rent_budget_note_public") if IS_PUBLIC_MODE else t("rent_budget_note_internal")
+    st.markdown(
+        hero_block(
+            title=t("rent_budget_title"),
+            subtitle=note,
+            badge=badge,
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_rent_budget_summary(*, budget_min: int, budget_max: int) -> None:
+    with st.container(border=True):
+        st.markdown(f"**{t('rent_budget_summary_title')}**")
+        st.caption(t("rent_budget_summary_note"))
+        st.markdown(
+            budget_hero_block(
+                label=t("rent_budget_limit_label"),
+                value=_weekly_money(budget_max),
+                note=f"{t('rent_budget_applied_range')} {_weekly_money(budget_min)} - {_weekly_money(budget_max)}",
+            ),
+            unsafe_allow_html=True,
+        )
+
+
+def _render_rent_dashboard_cards(insight):
+    cards = [
+        (tr("典型周租", "Typical weekly rent"), _weekly_money(insight["typical_weekly_rent"]), tr("当前筛选结果中的典型周租水平", "Typical weekly rent across the active result set")),
+        (tr("租金预算覆盖率", "Rent budget coverage"), f"{insight['coverage_ratio']:.0%}", tr("当前预算在租盘结果中的覆盖程度", "How much of the current rental field fits the active budget")),
+        (tr("可选 suburb", "Available suburbs"), f"{insight['suburb_count']:,}", tr("当前顶层筛选仍然覆盖的租房搜索范围", "Rental search areas still covered by the active top filters")),
+        (tr("匹配租盘", "Matching rentals"), f"{insight['listing_count']:,}", tr("当前页面筛选后的租盘数量", "Rentals remaining after the active page filters")),
+    ]
+    cols = st.columns(4)
+    for col, (label, value, caption) in zip(cols, cards):
+        with col:
+            st.markdown(
+                f"""
+                <div class="internal-card">
+                  <div class="internal-card-title">{escape(label)}</div>
+                  <div class="internal-metric-value">{escape(value)}</div>
+                  <div class="internal-help-text" style="margin-top:0.55rem;">{escape(caption)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+def _render_rent_overview_row(insight, *, budget_min: int, budget_max: int):
+    cards = [
+        (
+            t("rent_overview_budget"),
+            _weekly_money(budget_max),
+            f"{t('rent_budget_applied_range')} {_weekly_money(budget_min)} - {_weekly_money(budget_max)}",
+        ),
+        (
+            t("rent_overview_signal"),
+            str(insight["signal_label"]),
+            tr(
+                f"当前覆盖率约为 {insight['coverage_ratio']:.0%}",
+                f"Current coverage is about {insight['coverage_ratio']:.0%}.",
+            ),
+        ),
+        (
+            t("rent_overview_suburbs"),
+            f"{insight['suburb_count']:,}",
+            tr("当前筛选仍覆盖的 suburb 数量", "Suburbs still covered by the active top filters."),
+        ),
+        (
+            t("rent_overview_rentals"),
+            f"{insight['listing_count']:,}",
+            tr("当前页面筛选后的租盘数量", "Rentals remaining after the active page filters."),
+        ),
+    ]
+    cols = st.columns(4)
+    for col, (label, value, caption) in zip(cols, cards):
+        with col:
+            st.markdown(
+                f"""
+                <div class="internal-card">
+                  <div class="internal-card-title">{escape(label)}</div>
+                  <div class="internal-metric-value">{escape(value)}</div>
+                  <div class="internal-help-text" style="margin-top:0.55rem;">{escape(caption)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 def main():
@@ -1780,7 +1886,9 @@ def main():
     _init_state()
     with st.sidebar:
         sidebar_common(include_dwelling=False)
-    render_external_page_header(
+    _render_rent_page_header()
+    if False:
+        render_external_page_header(
         badge=tr("Public Beta", "Public Beta"),
         title=tr("租房预算地图", "Rent Budget"),
         note=tr(
@@ -1816,17 +1924,34 @@ def main():
     search_submitted = False
     reset_submitted = False
 
+    _render_rent_budget_summary(
+        budget_min=external_budget_range[0],
+        budget_max=external_budget_range[1],
+    )
+
     with st.container(border=True):
+        st.markdown(
+            f"""
+            <div class="internal-filter-panel">
+              <div class="internal-filter-shell-head">
+                <div class="internal-card-title">{escape(t("rent_budget_controls_title"))}</div>
+                <div class="internal-help-text">{escape(t("rent_budget_controls_note"))}</div>
+              </div>
+            """,
+            unsafe_allow_html=True,
+        )
         with st.form("rent_search_form", border=False):
-            budget_col, filter_col = st.columns([1.25, 2.0])
+            budget_col = st.container()
+            filter_col = st.container()
             with budget_col:
-                st.markdown(f"<div class='budget-budget-pill'>{tr('当前周租预算', 'Current weekly rent budget')}: {_weekly_money(min_budget)} - {_weekly_money(max_budget)}</div>", unsafe_allow_html=True)
+                st.markdown(f"**{t('rent_budget_limit_label')}**")
                 budget_min, budget_max = st.select_slider(
                     tr("周租预算区间", "Weekly rent budget range"),
                     options=external_budget_options,
                     value=external_budget_range,
                     format_func=_format_external_rent_budget_label,
                 )
+                st.markdown(f"<div class='internal-inline-note'>{escape(t('rent_budget_limit_note'))}</div>", unsafe_allow_html=True)
                 st.caption(
                     tr(
                         "低租金段使用更细的预算档位，高租金段使用更宽的档位，以便更快浏览租盘。",
@@ -1970,6 +2095,7 @@ def main():
                 search_submitted = st.form_submit_button(tr("搜索", "Search"), type="primary", use_container_width=True)
             with action_cols[1]:
                 reset_submitted = st.form_submit_button(tr("重置筛选", "Reset filters"), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if reset_submitted:
         _reset_external_rent_filters(min_budget, max_budget, external_budget_options)
@@ -2103,20 +2229,19 @@ def main():
     if commute_label:
         filters_for_summary["commute_label"] = commute_label
     with st.container(border=True):
+        st.markdown(f"**{tr('当前筛选', 'Active filters')}**")
         _render_external_applied_filter_summary(filters_for_summary, rent_mode=True)
     if filtered_rent_listings.empty:
         st.warning(tr("当前筛选条件下没有匹配租盘。", "No rental listings match the current filters."))
     else:
         if focus_notice:
             st.warning(focus_notice)
-        metrics_cols = st.columns(4)
-        metrics_cols[0].metric(tr("典型周租", "Typical weekly rent"), _weekly_money(insight["typical_weekly_rent"]))
-        metrics_cols[1].metric(tr("租金预算覆盖率", "Rent budget coverage"), f"{insight['coverage_ratio']:.0%}")
-        metrics_cols[2].metric(tr("可选 suburb", "Available suburbs"), f"{insight['suburb_count']:,}")
-        metrics_cols[3].metric(tr("匹配租盘", "Matching rentals"), f"{insight['listing_count']:,}")
-        if commute_label and not commute_notice:
-            st.caption(commute_label)
         with st.container(border=True):
+            st.markdown(f"**{t('rent_budget_dashboard_title')}**")
+            st.caption(t("rent_budget_dashboard_note"))
+            _render_rent_overview_row(insight, budget_min=budget_min, budget_max=budget_max)
+            if commute_label and not commute_notice:
+                st.markdown(f"<span class='internal-chip internal-chip-caution'>{escape(commute_label)}</span>", unsafe_allow_html=True)
             st.markdown(f"**{tr('租金结论', 'Rent conclusion')}**")
             st.write(insight["conclusion"])
             if selected_suburb != "__ALL__":
@@ -2155,52 +2280,57 @@ def main():
                 ),
                 "active_listing_count": int(len(df.loc[df["suburb"].astype(str) == str(selected_suburb)])),
             }
-        map_col, panel_col = st.columns([7, 3], gap="large")
-        with map_col:
-            with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
-                st.markdown(f"**{tr('Map', 'Map')}**")
-                st.caption(tr("先看覆盖率，再看点位。首次加载需几秒。", "Read coverage first, then markers. First load can take a few seconds."))
-                with perf.track("map_prep_external_panel"):
-                    selected_suburb = _build_map(context_rent_listings, suburb_summary, selected_suburb)
-        browser_listings, focused_match_count = _resolve_focused_suburb_browser_rows(
-            display_rent_listings,
-            all_display_listings,
-            selected_suburb=selected_suburb,
-            browser_scope_mode=browser_scope_mode,
-        )
-        selected_listing_id = _selected_listing_id()
-        if selected_listing_id and selected_listing_id not in set(browser_listings["listing_id"].astype(str)):
-            _clear_selected_listing()
-        if selected_suburb != "__ALL__" and focused_match_count <= 0:
-            browser_empty_state = {
-                "focused_suburb": selected_suburb,
-                "filter_summary": _browser_filter_summary(
-                    budget_min=budget_min,
-                    budget_max=budget_max,
-                    min_budget=min_budget,
-                    max_budget=max_budget,
-                    min_bedrooms=min_bedrooms,
-                    exact_bedrooms=exact_bedrooms,
-                ),
-                "active_listing_count": int(len(df.loc[df["suburb"].astype(str) == str(selected_suburb)])),
-            }
-        else:
-            browser_empty_state = None
-        with panel_col:
-            with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
-                if selected_suburb != "__ALL__":
-                    st.caption(f"{tr('当前聚焦 suburb', 'Focused suburb')}: {selected_suburb}")
-                _render_external_listing_panel(
-                    browser_listings,
-                    selected_suburb,
-                    None,
-                    browser_scope_mode=browser_scope_mode,
-                    empty_state=browser_empty_state,
-                )
+        with st.container(border=True):
+            st.markdown(f"**{t('rent_budget_map_title')} + {t('rent_budget_browser_title')}**")
+            st.caption(t("rent_budget_map_note"))
+            map_col, panel_col = st.columns([7, 3], gap="large")
+            with map_col:
+                with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
+                    st.markdown(f"**{t('rent_budget_map_title')}**")
+                    st.caption(t("rent_budget_map_note"))
+                    with perf.track("map_prep_external_panel"):
+                        selected_suburb = _build_map(context_rent_listings, suburb_summary, selected_suburb)
+            browser_listings, focused_match_count = _resolve_focused_suburb_browser_rows(
+                display_rent_listings,
+                all_display_listings,
+                selected_suburb=selected_suburb,
+                browser_scope_mode=browser_scope_mode,
+            )
+            selected_listing_id = _selected_listing_id()
+            if selected_listing_id and selected_listing_id not in set(browser_listings["listing_id"].astype(str)):
+                _clear_selected_listing()
+            if selected_suburb != "__ALL__" and focused_match_count <= 0:
+                browser_empty_state = {
+                    "focused_suburb": selected_suburb,
+                    "filter_summary": _browser_filter_summary(
+                        budget_min=budget_min,
+                        budget_max=budget_max,
+                        min_budget=min_budget,
+                        max_budget=max_budget,
+                        min_bedrooms=min_bedrooms,
+                        exact_bedrooms=exact_bedrooms,
+                    ),
+                    "active_listing_count": int(len(df.loc[df["suburb"].astype(str) == str(selected_suburb)])),
+                }
+            else:
+                browser_empty_state = None
+            with panel_col:
+                with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
+                    st.markdown(f"**{t('rent_budget_browser_title')}**")
+                    if selected_suburb != "__ALL__":
+                        st.caption(f"{tr('当前聚焦 suburb', 'Focused suburb')}: {selected_suburb}")
+                    _render_external_listing_panel(
+                        browser_listings,
+                        selected_suburb,
+                        None,
+                        browser_scope_mode=browser_scope_mode,
+                        empty_state=browser_empty_state,
+                    )
     with st.container(border=True):
         status_cols = st.columns([2.5, 1])
         with status_cols[0]:
-            st.markdown(f"**{tr('Shortlist', 'Shortlist')}**")
+            st.markdown(f"**{t('rent_budget_shortlist_title')}**")
+            st.caption(t("rent_budget_shortlist_note"))
             st.markdown(f"<div class='budget-shortlist-status'>{tr('当前已加入', 'Currently shortlisted')}: {shortlist_count} {tr('套租盘', 'rentals')}</div>", unsafe_allow_html=True)
         with status_cols[1]:
             if shortlist_count > 0 and st.button(tr("清空 shortlist", "Clear shortlist"), use_container_width=True):

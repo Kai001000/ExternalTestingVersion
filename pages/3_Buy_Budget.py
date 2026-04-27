@@ -42,11 +42,12 @@ from utils.data import (
     order_external_sale_listing_display,
     resolve_commute_origin,
 )
-from utils.i18n import ensure_lang, get_lang, tr
+from utils.i18n import ensure_lang, get_lang, t, tr
 from utils.map_view import NSW_MAP_BOUNDS, clamp_to_nsw_map_view, resolve_budget_map_view
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_int, fmt_pct
 from utils.ui import inject_app_theme, render_external_page_header, sidebar_common
+from utils.ui_style import budget_hero_block, hero_block
 
 
 SUBURB_JOIN_ALIASES = {
@@ -552,9 +553,9 @@ def _sale_report_summary_sentence(verdicts: dict[str, str]) -> str:
 def _sale_report_price_positioning_verdict(delta: float | None) -> str:
     return _sale_report_verdict(
         delta,
-        lower_label=tr("ä½ŽäºŽ suburb æŒ‚ç‰Œä¸­ä½ä»·", "Below suburb listing median"),
-        middle_label=tr("æŽ¥è¿‘ suburb æŒ‚ç‰Œä¸­ä½ä»·", "Around suburb listing median"),
-        upper_label=tr("é«˜äºŽ suburb æŒ‚ç‰Œä¸­ä½ä»·", "Above suburb listing median"),
+        lower_label=tr("低于 suburb 挂牌中位价", "Below suburb listing median"),
+        middle_label=tr("接近 suburb 挂牌中位价", "Around suburb listing median"),
+        upper_label=tr("高于 suburb 挂牌中位价", "Above suburb listing median"),
     )
 
 
@@ -563,20 +564,20 @@ def _sale_report_liquidity_verdict(sales_28d: float | None) -> str:
     if sales is None:
         return "N/A"
     if sales >= 20:
-        return tr("æµåŠ¨æ€§æ´»è·ƒ", "Liquidity active")
+        return tr("流动性活跃", "Liquidity active")
     if sales >= 8:
-        return tr("æµåŠ¨æ€§ä¸­ç­‰", "Liquidity moderate")
-    return tr("æµåŠ¨æ€§åè–„", "Liquidity thin")
+        return tr("流动性中等", "Liquidity moderate")
+    return tr("流动性偏薄", "Liquidity thin")
 
 
 def _sale_report_rent_activity_verdict(active_count: int | None) -> str:
     if active_count is None:
         return "N/A"
     if int(active_count) >= 25:
-        return tr("ç§Ÿèµæ´»åŠ¨æ´»è·ƒ", "Rental activity active")
+        return tr("租赁活动活跃", "Rental activity active")
     if int(active_count) >= 10:
-        return tr("ç§Ÿèµæ´»åŠ¨ä¸­ç­‰", "Rental activity moderate")
-    return tr("ç§Ÿèµæ´»åŠ¨åè–„", "Rental activity thin")
+        return tr("租赁活动中等", "Rental activity moderate")
+    return tr("租赁活动偏薄", "Rental activity thin")
 
 
 def _sale_report_band_for_price(price: float | None) -> str | None:
@@ -591,12 +592,12 @@ def _sale_report_band_for_price(price: float | None) -> str | None:
 
 def _sale_report_percentile_label(percentile: float | None) -> str:
     if percentile is None or pd.isna(percentile):
-        return tr("å¯æ¯”æŒ‚ç‰Œä¸è¶³", "Insufficient comparable listings")
+        return tr("可比挂牌不足", "Insufficient comparable listings")
     if percentile <= 0.33:
-        return tr("å¤„äºŽå¯æ¯”æŒ‚ç‰Œè¾ƒä½Žä»·ä½", "In the lower range of comparable listings")
+        return tr("处于可比挂牌较低价位", "In the lower range of comparable listings")
     if percentile < 0.67:
-        return tr("å¯æ¯”æŒ‚ç‰Œä¸­æ®µä»·ä½", "In the middle range of comparable listings")
-    return tr("å¤„äºŽå¯æ¯”æŒ‚ç‰Œè¾ƒé«˜ä»·ä½", "In the upper range of comparable listings")
+        return tr("可比挂牌中段价位", "In the middle range of comparable listings")
+    return tr("处于可比挂牌较高价位", "In the upper range of comparable listings")
 
 
 def _sale_report_estimated_gross_yield(median_rent: float | None, price: float | None) -> float | None:
@@ -939,12 +940,29 @@ def _build_sale_report_sold_market_context(suburb: str, dwelling_group: str | No
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _build_sale_report_price_band_summary(dwelling_group: str | None) -> pd.DataFrame:
+def _build_sale_report_price_band_summary(
+    dwelling_group: str | None,
+    *,
+    context_level: str | None,
+    context_region: str | None,
+) -> pd.DataFrame:
     empty = pd.DataFrame(columns=["price_band", "latest_value", "stable_yoy", "anchor_date", "sales_28d", "series_name"])
-    if not dwelling_group:
+    if not dwelling_group or not context_level or not context_region:
         return empty
     market_view = _load_market_view_module_for_report()
-    band_data = market_view.load_price_band_data(str(dwelling_group).strip().upper())
+    normalized_level = str(context_level).strip().upper()
+    normalized_region = str(context_region).strip()
+    if not normalized_region:
+        return empty
+    if normalized_level in {"SUBURB", "POSTCODE"}:
+        band_level = "AREA"
+    else:
+        band_level = normalized_level
+    band_data = market_view.load_price_band_data(
+        band_level,
+        (normalized_region,),
+        str(dwelling_group).strip().upper(),
+    )
     if band_data.is_empty():
         return empty
 
@@ -1007,10 +1025,10 @@ def _build_sale_report_rent_context(suburb: str) -> dict[str, object]:
 
 def _build_sale_report_comparables(row: pd.Series, market_listings: pd.DataFrame) -> dict[str, object]:
     empty = {
-        "scope_label": tr("å½“å‰ç­›é€‰ä¸‹æ— å¯æ¯”æŒ‚ç‰Œ", "No comparable listings in the active filtered sale universe"),
+        "scope_label": tr("当前筛选下无可比挂牌", "No comparable listings in the active filtered sale universe"),
         "table": pd.DataFrame(),
         "percentile": None,
-        "range_label": tr("å¯æ¯”æŒ‚ç‰Œä¸è¶³", "Insufficient comparable listings"),
+        "range_label": tr("可比挂牌不足", "Insufficient comparable listings"),
         "selected_rank_text": "N/A",
     }
     if market_listings is None or market_listings.empty:
@@ -1039,21 +1057,21 @@ def _build_sale_report_comparables(row: pd.Series, market_listings: pd.DataFrame
             if selected_beds is not None:
                 subtype_beds = exact_subtype.loc[pd.to_numeric(exact_subtype["bedrooms"], errors="coerce") == selected_beds].copy()
                 if len(subtype_beds) >= 3:
-                    candidates.append((subtype_beds, tr("åŒ suburb / åŒ subtype / åŒæˆ·åž‹", "Same suburb / same subtype / same beds")))
-            candidates.append((exact_subtype, tr("åŒ suburb / åŒ subtype", "Same suburb / same subtype")))
+                    candidates.append((subtype_beds, tr("同 suburb / 同 subtype / 同户型", "Same suburb / same subtype / same beds")))
+            candidates.append((exact_subtype, tr("同 suburb / 同 subtype", "Same suburb / same subtype")))
     if group:
         same_group = scope.loc[scope["property_group"].astype(str).str.lower() == group].copy()
         if not same_group.empty:
             if selected_beds is not None:
                 group_beds = same_group.loc[pd.to_numeric(same_group["bedrooms"], errors="coerce") == selected_beds].copy()
                 if len(group_beds) >= 3:
-                    candidates.append((group_beds, tr("åŒ suburb / åŒå¤§ç±» / åŒæˆ·åž‹", "Same suburb / same property group / same beds")))
-            candidates.append((same_group, tr("åŒ suburb / åŒå¤§ç±»", "Same suburb / same property group")))
+                    candidates.append((group_beds, tr("同 suburb / 同大类 / 同户型", "Same suburb / same property group / same beds")))
+            candidates.append((same_group, tr("同 suburb / 同大类", "Same suburb / same property group")))
     if selected_beds is not None:
         same_beds = scope.loc[pd.to_numeric(scope["bedrooms"], errors="coerce") == selected_beds].copy()
         if not same_beds.empty:
-            candidates.append((same_beds, tr("åŒ suburb / åŒæˆ·åž‹", "Same suburb / same beds")))
-    candidates.append((scope, tr("åŒ suburb å…¨éƒ¨æŒ‚ç‰Œ", "All active listings in the same suburb")))
+            candidates.append((same_beds, tr("同 suburb / 同户型", "Same suburb / same beds")))
+    candidates.append((scope, tr("同 suburb 全部挂牌", "All active listings in the same suburb")))
 
     chosen_scope, scope_label = candidates[-1]
     for candidate_df, candidate_label in candidates:
@@ -1090,7 +1108,7 @@ def _build_sale_report_comparables(row: pd.Series, market_listings: pd.DataFrame
         selected_rank_text = f"{rank}/{len(chosen_scope)}"
 
     table = chosen_scope.head(SALE_REPORT_COMPARABLE_LIMIT).copy()
-    table["note"] = table["is_selected"].map(lambda value: tr("æœ¬æˆ¿æº", "Selected") if bool(value) else "")
+    table["note"] = table["is_selected"].map(lambda value: tr("本房源", "Selected") if bool(value) else "")
     table["type_label"] = table.apply(_report_property_type, axis=1)
     table["beds_label"] = table["bedrooms"].map(_count_label)
     table["price_label"] = table["price_mid"].map(_report_money)
@@ -1159,7 +1177,11 @@ def _build_sale_report_context(row: pd.Series, market_listings: pd.DataFrame) ->
     price_positioning = _sale_report_price_positioning_verdict(delta_vs_suburb)
     liquidity_label = _sale_report_liquidity_verdict(sold_metrics.get("sales"))
     price_band_label = _sale_report_band_for_price(numeric_price)
-    price_band_summary = _build_sale_report_price_band_summary(dwelling_group)
+    price_band_summary = _build_sale_report_price_band_summary(
+        dwelling_group,
+        context_level=sold_context.get("context_level"),
+        context_region=sold_context.get("context_region"),
+    )
     price_band_row = (
         price_band_summary.loc[price_band_summary["price_band"] == price_band_label].iloc[0].to_dict()
         if price_band_label and not price_band_summary.empty and (price_band_summary["price_band"] == price_band_label).any()
@@ -1471,7 +1493,7 @@ def _build_sale_report_position_figure(context: dict[str, object]) -> plt.Figure
         ax.text(
             0.5,
             0.5,
-            tr("æš‚æ— è¶³å¤Ÿçš„ suburb æŒ‚ç‰Œä»·æ ¼æ•°æ®æ¥å®šä½æœ¬æˆ¿æºã€‚", "Insufficient suburb listing-price data to position this property."),
+            tr("暂无足够的 suburb 挂牌价格数据来定位本房源。", "Insufficient suburb listing-price data to position this property."),
             ha="center",
             va="center",
             fontproperties=_pdf_font(11),
@@ -1490,14 +1512,14 @@ def _build_sale_report_position_figure(context: dict[str, object]) -> plt.Figure
     ax.hlines(0.5, plot_min, plot_max, color="#d0d5dd", linewidth=6, zorder=1)
     ax.scatter([suburb_median], [0.5], color="#1d4ed8", s=110, zorder=3)
     ax.scatter([listing_price], [0.5], color="#111827", s=120, zorder=4)
-    ax.text(suburb_median, 0.68, tr("Suburb ä¸­ä½ä»·", "Suburb median"), ha="center", va="bottom", fontproperties=_pdf_font(9), color="#1d4ed8")
-    ax.text(listing_price, 0.28, tr("æœ¬æˆ¿æº", "Selected listing"), ha="center", va="top", fontproperties=_pdf_font(9), color="#111827")
+    ax.text(suburb_median, 0.68, tr("Suburb 中位价", "Suburb median"), ha="center", va="bottom", fontproperties=_pdf_font(9), color="#1d4ed8")
+    ax.text(listing_price, 0.28, tr("本房源", "Selected listing"), ha="center", va="top", fontproperties=_pdf_font(9), color="#111827")
     ax.text(plot_min, 0.08, _report_money(plot_min), ha="left", va="bottom", fontproperties=_pdf_font(8), color="#667085")
     ax.text(plot_max, 0.08, _report_money(plot_max), ha="right", va="bottom", fontproperties=_pdf_font(8), color="#667085")
     ax.text(
         0.01,
         0.93,
-        f"{tr('ç»“è®º', 'Conclusion')}: {context.get('price_positioning', 'N/A')}",
+        f"{tr('结论', 'Conclusion')}: {context.get('price_positioning', 'N/A')}",
         transform=ax.transAxes,
         ha="left",
         va="top",
@@ -1529,7 +1551,7 @@ def _build_sale_report_comparables_figure(context: dict[str, object]) -> plt.Fig
         ax.text(
             0.5,
             0.5,
-            tr("å½“å‰ç­›é€‰ä¸‹æš‚æ— è¶³å¤Ÿçš„å¯æ¯”æŒ‚ç‰Œã€‚", "There are not enough comparable active listings in the current filtered universe."),
+            tr("当前筛选下暂无足够的可比挂牌。", "There are not enough comparable active listings in the current filtered universe."),
             transform=ax.transAxes,
             ha="center",
             va="center",
@@ -1543,11 +1565,11 @@ def _build_sale_report_comparables_figure(context: dict[str, object]) -> plt.Fig
     table = ax.table(
         cellText=display.drop(columns=["is_selected"]).values.tolist(),
         colLabels=[
-            tr("æ ‡è®°", "Note"),
-            tr("åœ°å€", "Address"),
-            tr("ç±»åž‹", "Type"),
-            tr("å§å®¤", "Beds"),
-            tr("ä»·æ ¼", "Price"),
+            tr("标记", "Note"),
+            tr("地址", "Address"),
+            tr("类型", "Type"),
+            tr("卧室", "Beds"),
+            tr("价格", "Price"),
         ],
         loc="upper left",
         bbox=[0.0, 0.14, 1.0, 0.74],
@@ -1569,7 +1591,7 @@ def _build_sale_report_comparables_figure(context: dict[str, object]) -> plt.Fig
     ax.text(
         0.0,
         0.06,
-        f"{tr('ä»·ä½åˆ¤æ–­', 'Relative position')}: {comparables.get('range_label', 'N/A')} · {tr('ä»·æ ¼æŽ’å', 'Price rank')}: {comparables.get('selected_rank_text', 'N/A')}",
+        f"{tr('价位判断', 'Relative position')}: {comparables.get('range_label', 'N/A')} · {tr('价格排名', 'Price rank')}: {comparables.get('selected_rank_text', 'N/A')}",
         transform=ax.transAxes,
         ha="left",
         va="bottom",
@@ -1714,7 +1736,7 @@ def _render_sale_report_pdf_bytes_v2(row: pd.Series, market_listings: pd.DataFra
         fig.patch.set_facecolor("white")
         y = 0.965
 
-        _pdf_text(fig, 0.07, y, tr("å‡ºå”® shortlist å†³ç­–æŠ¥å‘Š", "Sale Shortlist Decision Report"), size=20, bold=True)
+        _pdf_text(fig, 0.07, y, tr("出售 shortlist 决策报告", "Sale Shortlist Decision Report"), size=20, bold=True)
         y -= 0.035
         _pdf_text(fig, 0.07, y, _report_text(row.get("address")), size=14, bold=True)
         y -= 0.024
@@ -2766,9 +2788,9 @@ def _coerce_buy_sort_key(value: object) -> str:
         "Price high to low": "price_desc",
         "价格从高到低": "price_desc",
         "Newest listing": "newest",
-        "æœ€æ–°æˆ¿æº": "newest",
+        "最新房源": "newest",
         "Bedrooms": "bedrooms_desc",
-        "å§å®¤æ•°": "bedrooms_desc",
+        "卧室数": "bedrooms_desc",
         "Suburb": "suburb_asc",
     }
     return reverse.get(current) or legacy_map.get(current, "price_asc")
@@ -3350,6 +3372,7 @@ def _budget_insight(filtered: pd.DataFrame, context_df: pd.DataFrame, budget_max
         "listing_count": listing_count,
         "common_type": _title_case_subtype(_mode_or_na(filtered["property_subtype"])),
         "common_bedrooms": _mode_or_na(filtered["bedrooms"]),
+        "common_bathrooms": _mode_or_na(filtered["bathrooms"]),
         "most_affordable_suburb": most_affordable_suburb,
         "plus_5": int(len(plus_5)),
         "plus_10": int(len(stretch_pool)),
@@ -4103,7 +4126,7 @@ def _external_listing_price_label(row: pd.Series) -> str:
 
 def _compact_count_cell(value: object) -> str:
     text = _count_label(value)
-    return "â€”" if text == "N/A" else text
+    return "—" if text == "N/A" else text
 
 
 def _external_sale_table_headers() -> list[str]:
@@ -4791,7 +4814,7 @@ def _render_shortlist_summary(shortlist_df: pd.DataFrame) -> None:
     priced = shortlist_df.loc[shortlist_df["has_price"]]
     price_range = "N/A"
     if not priced.empty:
-        price_range = f"{_money(priced['price_filter_min'].min())} â€“ {_money(priced['price_filter_max'].max())}"
+        price_range = f"{_money(priced['price_filter_min'].min())} – {_money(priced['price_filter_max'].max())}"
     st.code(
         "\n".join([
             f"{tr('Shortlisted listings', 'Shortlisted listings')}: {len(shortlist_df)}",
@@ -5053,11 +5076,114 @@ def _render_external_buy_applied_filter_summary(filters: dict[str, object]) -> N
             )
         )
     if filters.get("selected_suburbs"):
-        lines.append(f"{tr('排序', 'Sort')}: {filters['selected_sort']}")
+        lines.append(f"{tr('重点 suburb', 'Priority suburb')}: {', '.join(filters['selected_suburbs'])}")
     if filters.get("selected_postcodes"):
         lines.append(f"{tr('邮编', 'Postcode')}: {', '.join(filters['selected_postcodes'])}")
     lines.append(f"{tr('排序', 'Sort')}: {filters['selected_sort']}")
-    st.markdown("  \n".join([line for line in lines if line]))
+    chips = "".join(
+        f"<span class='internal-chip' style='margin:0 0.45rem 0.45rem 0;'>{escape(line)}</span>"
+        for line in lines[1:]
+        if line
+    )
+    st.markdown(
+        f"""
+        <div class="internal-insight-card">
+          <div class="internal-card-title">{escape(lines[0])}</div>
+          <div class="internal-help-text" style="margin-bottom:0.55rem;">{escape(t('buy_budget_dashboard_note'))}</div>
+          <div>{chips}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_buy_page_header() -> None:
+    badge = t("buy_budget_mode_public") if IS_PUBLIC_MODE else t("buy_budget_mode_internal")
+    note = t("buy_budget_note_public") if IS_PUBLIC_MODE else t("buy_budget_note_internal")
+    st.markdown(
+        hero_block(
+            title=t("buy_budget_title"),
+            subtitle=note,
+            badge=badge,
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_buy_budget_summary(*, budget_min: int, budget_max: int) -> None:
+    with st.container(border=True):
+        st.markdown(f"**{t('buy_budget_summary_title')}**")
+        st.caption(t("buy_budget_summary_note"))
+        st.markdown(
+            budget_hero_block(
+                label=t("buy_budget_limit_label"),
+                value=_money(budget_max),
+                note=f"{t('buy_budget_applied_range')} {_money(budget_min)} - {_money(budget_max)}",
+            ),
+            unsafe_allow_html=True,
+        )
+
+
+def _render_buy_dashboard_cards(insight: dict[str, object], *, budget_min: int, budget_max: int) -> None:
+    cards = [
+        (tr("当前挂牌中位价", "Current median asking price"), _money(insight["typical_price"]), tr("当前筛选结果中的典型标价", "Typical asking price within the active result set"), ""),
+        (tr("预算信号", "Budget signal"), insight["signal_label"], tr("帮助判断当前预算位于市场中的相对位置", "Helps position the current budget within the market"), ""),
+        (tr("可选 suburb", "Available suburbs"), f"{insight['suburb_count']:,}", tr("当前顶层筛选仍然覆盖的 suburb 数量", "Suburbs still covered by the active top filters"), ""),
+        (tr("匹配房源", "Matching listings"), f"{insight['listing_count']:,}", tr("当前页面筛选后的房源数量", "Listings remaining after the active page filters"), ""),
+    ]
+    cols = st.columns(4)
+    for col, (label, value, caption, tone) in zip(cols, cards):
+        with col:
+            tone_html = f"<div class='{tone}'></div>" if tone else ""
+            st.markdown(
+                f"""
+                <div class="internal-card">
+                  <div class="internal-card-title">{escape(label)}</div>
+                  <div class="internal-metric-value">{escape(value)}</div>
+                  {tone_html}
+                  <div class="internal-help-text" style="margin-top:0.55rem;">{escape(caption)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+def _render_buy_overview_row(insight: dict[str, object], *, budget_min: int, budget_max: int) -> None:
+    cards = [
+        (
+            t("buy_overview_budget"),
+            _money(budget_max),
+            f"{t('buy_budget_applied_range')} {_money(budget_min)} - {_money(budget_max)}",
+        ),
+        (
+            t("buy_overview_signal"),
+            str(insight["signal_label"]),
+            tr("帮助判断当前预算位于市场中的相对位置", "Helps position the active budget within the market."),
+        ),
+        (
+            t("buy_overview_bedrooms"),
+            str(insight.get("common_bedrooms") or "N/A"),
+            tr("当前匹配房源中最常见的卧室数量", "Most common bedroom count in the current matches."),
+        ),
+        (
+            t("buy_overview_bathrooms"),
+            str(insight.get("common_bathrooms") or "N/A"),
+            tr("当前匹配房源中最常见的浴室数量", "Most common bathroom count in the current matches."),
+        ),
+    ]
+    cols = st.columns(4)
+    for col, (label, value, caption) in zip(cols, cards):
+        with col:
+            st.markdown(
+                f"""
+                <div class="internal-card">
+                  <div class="internal-card-title">{escape(label)}</div>
+                  <div class="internal-metric-value">{escape(value)}</div>
+                  <div class="internal-help-text" style="margin-top:0.55rem;">{escape(caption)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 def main() -> None:
@@ -5068,7 +5194,9 @@ def main() -> None:
 
     with st.sidebar:
         sidebar_common(include_dwelling=False)
-    render_external_page_header(
+    _render_buy_page_header()
+    if False:
+        render_external_page_header(
         badge=tr("Public Beta", "Public Beta"),
         title=tr("买房预算", "Buy Budget"),
         note=tr(
@@ -5107,17 +5235,34 @@ def main() -> None:
     search_submitted = False
     reset_submitted = False
 
+    _render_buy_budget_summary(
+        budget_min=external_budget_range[0],
+        budget_max=external_budget_range[1],
+    )
+
     with st.container(border=True):
+        st.markdown(
+            f"""
+            <div class="internal-filter-panel">
+              <div class="internal-filter-shell-head">
+                <div class="internal-card-title">{escape(t("buy_budget_controls_title"))}</div>
+                <div class="internal-help-text">{escape(t("buy_budget_controls_note"))}</div>
+              </div>
+            """,
+            unsafe_allow_html=True,
+        )
         with st.form("budget_search_form", border=False):
-            budget_col, filter_col = st.columns([1.25, 2.0])
+            budget_col = st.container()
+            filter_col = st.container()
             with budget_col:
-                st.markdown(f"<div class='budget-budget-pill'>{tr('当前预算', 'Current budget')}: {_money(min_budget)} - {_money(max_budget)}</div>", unsafe_allow_html=True)
+                st.markdown(f"**{t('buy_budget_limit_label')}**")
                 budget_min, budget_max = st.select_slider(
                     tr("预算区间", "Budget range"),
                     options=external_budget_options,
                     value=external_budget_range,
                     format_func=_format_external_sale_budget_label,
                 )
+                st.markdown(f"<div class='internal-inline-note'>{escape(t('buy_budget_limit_note'))}</div>", unsafe_allow_html=True)
                 st.caption(
                     tr(
                         "低价区间使用更细分的步长，高价区间使用更宽的步长，以便更快浏览。",
@@ -5127,16 +5272,13 @@ def main() -> None:
                 st.caption(tr("预算是本页的核心驱动条件，其他筛选都叠加在预算之上。", "Budget is the main driver of this page; the other filters sit on top of it."))
             with filter_col:
                 row1, row2, row3 = st.columns([1.15, 1.0, 1.0])
+                suburb_options = sorted(x for x in df["suburb"].dropna().unique().tolist() if str(x).strip())
+                postcode_options = sorted(x for x in df["postcode"].dropna().unique().tolist() if str(x).strip())
                 with row1:
-                    pass
-                    suburb_options = sorted(x for x in df["suburb"].dropna().unique().tolist() if str(x).strip())
-                selected_suburbs = st.multiselect(tr("优先 suburb", "Priority suburbs"), options=suburb_options, placeholder=tr("不限 suburb", "Any suburb"), key="budget_selected_suburbs")
+                    selected_suburbs = st.multiselect(tr("优先 suburb", "Priority suburbs"), options=suburb_options, placeholder=tr("不限 suburb", "Any suburb"), key="budget_selected_suburbs")
                 with row2:
-                    pass
-                    postcode_options = sorted(x for x in df["postcode"].dropna().unique().tolist() if str(x).strip())
-                selected_postcodes = st.multiselect(tr("邮编", "Postcode"), options=postcode_options, placeholder=tr("不限邮编", "Any postcode"), key="budget_selected_postcodes")
+                    selected_postcodes = st.multiselect(tr("邮编", "Postcode"), options=postcode_options, placeholder=tr("不限邮编", "Any postcode"), key="budget_selected_postcodes")
                 with row3:
-                    pass
                     current_min_bedrooms = int(st.session_state.get("budget_min_bedrooms", 0))
                 commute_query = ""
                 commute_mode = "drive"
@@ -5305,6 +5447,7 @@ def main() -> None:
             with action_cols[1]:
                 reset_submitted = st.form_submit_button(tr("重置筛选", "Reset filters"), use_container_width=True)
             st.caption(tr("房产大类计数基于当前预算、suburb、邮编和卧室/浴室/车位条件计算，不包含房产大类筛选本身。", "Property-group counts are computed from the current budget, suburb, postcode, and bed/bath/parking context, excluding the property-group filter itself."))
+        st.markdown("</div>", unsafe_allow_html=True)
     if True and reset_submitted:
         _reset_external_buy_filters(min_budget, max_budget, external_budget_options)
         st.rerun()
@@ -5390,7 +5533,7 @@ def main() -> None:
                 max_minutes=int(commute_minutes),
             )
             st.session_state["budget_commute_notice"] = None if commute_origin.get("matched") else tr(
-                "æ— æ³•è¯†åˆ«è¯¥åœ°ç‚¹ï¼Œè¯·ä¼˜å…ˆä½¿ç”¨ NSW suburbã€postcode æˆ–å½“å‰æˆ¿æºåœ°å€ã€‚",
+                "无法识别该地点，请优先使用 NSW suburb、postcode 或当前房源地址。",
                 "That location could not be resolved. Try an NSW suburb or postcode.",
             )
             if commute_origin.get("matched"):
@@ -5530,32 +5673,25 @@ def main() -> None:
     if commute_label:
         filters_for_summary["commute_label"] = commute_label
     with st.container(border=True):
+        st.markdown(f"**{tr('当前筛选', 'Active filters')}**")
         _render_external_buy_applied_filter_summary(filters_for_summary)
     if filtered_listings.empty:
         st.warning(tr("当前筛选条件下没有匹配房源。", "No listings match the current filters."))
     else:
         if focus_notice:
             st.warning(focus_notice)
-        metrics_cols = st.columns(4)
-        with metrics_cols[0]:
-            st.metric(tr("当前挂牌中位价", "Current median asking price"), _money(insight["typical_price"]))
-        with metrics_cols[1]:
-            st.metric(tr("预算信号", "Budget signal"), insight["signal_label"])
-        with metrics_cols[2]:
-            st.metric(tr("可选 suburb", "Available suburbs"), f"{insight['suburb_count']:,}")
-        with metrics_cols[3]:
-            st.metric(tr("匹配房源", "Matching listings"), f"{insight['listing_count']:,}")
-
-        if commute_label and not commute_notice:
-            st.caption(commute_label)
         with st.container(border=True):
+            st.markdown(f"**{t('buy_budget_dashboard_title')}**")
+            st.caption(t("buy_budget_dashboard_note"))
+            _render_buy_overview_row(insight, budget_min=budget_min, budget_max=budget_max)
+            if commute_label and not commute_notice:
+                st.markdown(f"<span class='internal-chip internal-chip-caution'>{escape(commute_label)}</span>", unsafe_allow_html=True)
             st.markdown(f"**{tr('预算结论', 'Budget conclusion')}**")
             st.write(insight["conclusion"])
             if insight["new_suburbs"] and selected_suburb == "__ALL__":
                 st.caption(f"{tr('潜在可拓展 suburb', 'Potential suburb expansion')}: {', '.join(insight['new_suburbs'])}")
             if insight.get("uplift_note"):
                 st.caption(insight["uplift_note"])
-
         with st.container(border=True):
             focus_cols = st.columns([2.4, 1])
             with focus_cols[0]:
@@ -5580,45 +5716,49 @@ def main() -> None:
         else:
             focus_listings = browser_listings
         if True:
-            map_col, panel_col = st.columns([7, 3], gap="large")
-            with map_col:
-                with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
-                    st.markdown(f"**{tr('Map', 'Map')}**")
-                    st.caption(tr("先看覆盖率，再看点位。首次加载需几秒。", "Read coverage first, then markers. First load can take a few seconds."))
-                    with perf.track("map_prep_external_panel"):
-                        selected_suburb = _build_map(matched_filtered_listings, suburb_summary, selected_suburb)
-            browser_scope_mode = _browser_scope_mode()
-            focus_listings, focused_match_count = _resolve_focused_suburb_browser_rows(
-                display_listings,
-                all_display_listings,
-                selected_suburb=selected_suburb,
-                browser_scope_mode=browser_scope_mode,
-            )
-            browser_empty_state = None
-            if selected_suburb != "__ALL__" and focused_match_count <= 0:
-                browser_empty_state = {
-                    "focused_suburb": selected_suburb,
-                    "filter_summary": _browser_filter_summary(
-                        budget_min=budget_min,
-                        budget_max=budget_max,
-                        min_budget=min_budget,
-                        max_budget=max_budget,
-                        min_bedrooms=min_bedrooms,
-                        exact_bedrooms=exact_bedrooms,
-                    ),
-                    "active_listing_count": int(len(df.loc[df["suburb"].astype(str) == str(selected_suburb)])),
-                }
-            with panel_col:
-                with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
-                    if selected_suburb != "__ALL__":
-                        st.caption(f"{tr('当前聚焦 suburb', 'Focused suburb')}: {selected_suburb}")
-                    _render_external_listing_panel(
-                        focus_listings,
-                        selected_suburb,
-                        protection_meta,
-                        browser_scope_mode=browser_scope_mode,
-                        empty_state=browser_empty_state,
-                    )
+            with st.container(border=True):
+                st.markdown(f"**{t('buy_budget_map_title')} + {t('buy_budget_browser_title')}**")
+                st.caption(t("buy_budget_map_note"))
+                map_col, panel_col = st.columns([7, 3], gap="large")
+                with map_col:
+                    with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
+                        st.markdown(f"**{t('buy_budget_map_title')}**")
+                        st.caption(tr("先看覆盖率，再看点位。首次加载需几秒。", "Read coverage first, then markers. First load can take a few seconds."))
+                        with perf.track("map_prep_external_panel"):
+                            selected_suburb = _build_map(matched_filtered_listings, suburb_summary, selected_suburb)
+                browser_scope_mode = _browser_scope_mode()
+                focus_listings, focused_match_count = _resolve_focused_suburb_browser_rows(
+                    display_listings,
+                    all_display_listings,
+                    selected_suburb=selected_suburb,
+                    browser_scope_mode=browser_scope_mode,
+                )
+                browser_empty_state = None
+                if selected_suburb != "__ALL__" and focused_match_count <= 0:
+                    browser_empty_state = {
+                        "focused_suburb": selected_suburb,
+                        "filter_summary": _browser_filter_summary(
+                            budget_min=budget_min,
+                            budget_max=budget_max,
+                            min_budget=min_budget,
+                            max_budget=max_budget,
+                            min_bedrooms=min_bedrooms,
+                            exact_bedrooms=exact_bedrooms,
+                        ),
+                        "active_listing_count": int(len(df.loc[df["suburb"].astype(str) == str(selected_suburb)])),
+                    }
+                with panel_col:
+                    with st.container(border=True, height=EXTERNAL_MAP_PANEL_HEIGHT):
+                        st.markdown(f"**{t('buy_budget_browser_title')}**")
+                        if selected_suburb != "__ALL__":
+                            st.caption(f"{tr('当前聚焦 suburb', 'Focused suburb')}: {selected_suburb}")
+                        _render_external_listing_panel(
+                            focus_listings,
+                            selected_suburb,
+                            protection_meta,
+                            browser_scope_mode=browser_scope_mode,
+                            empty_state=browser_empty_state,
+                        )
     with st.container(border=True):
         status_cols = st.columns([2.5, 1])
         with status_cols[0]:

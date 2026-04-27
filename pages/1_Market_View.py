@@ -9,12 +9,13 @@ import polars as pl
 import streamlit as st
 
 from utils.charts import DISPLAY_MODE_DUAL, DISPLAY_MODE_LONG, DISPLAY_MODE_SHORT, build_band_chart, build_interactive_chart
-from utils.config import BASE_DIR
+from utils.config import BASE_DIR, IS_PUBLIC_MODE
 from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, _expand_region16_segments_daily, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales
 from utils.i18n import ensure_lang, t, tr
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_float0, fmt_int, fmt_pct
 from utils.ui import inject_app_theme, sidebar_common
+from utils.ui_style import hero_block
 
 st.markdown(
     """
@@ -103,37 +104,56 @@ def _inject_market_view_css():
             padding-top: 1.2rem;
             padding-bottom: 2.6rem;
         }
-        .mv-title {
-            font-size: 2.1rem;
-            font-weight: 800;
-            color: #1f2937;
-            line-height: 1.15;
-            margin: 0;
+        .mv-hero-shell {
+            margin-bottom: 1rem;
         }
-        .mv-subtitle {
-            color: #6b7280;
-            font-size: 0.96rem;
+        .mv-hero-shell .internal-page-title {
             margin-top: 0.35rem;
-            margin-bottom: 0.85rem;
         }
-        .mv-badge {
+        .mv-context-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.9rem;
+        }
+        .mv-context-chip {
             display: inline-flex;
             align-items: center;
+            gap: 0.32rem;
             border-radius: 999px;
-            background: #e0efff;
-            color: #175cd3;
-            border: 1px solid #b2ddff;
-            padding: 0.38rem 0.78rem;
-            font-size: 0.86rem;
+            padding: 0.3rem 0.7rem;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid var(--ui-color-border);
+            color: var(--ui-color-neutral-700);
+            font-size: 0.79rem;
             font-weight: 700;
-            white-space: nowrap;
+        }
+        .mv-context-chip strong {
+            color: var(--ui-color-neutral-950);
+            font-weight: 800;
+        }
+        .mv-filter-shell {
+            margin-bottom: 1rem;
+        }
+        .mv-filter-title {
+            color: var(--ui-color-neutral-900);
+            font-size: 1.02rem;
+            font-weight: 800;
+            margin-bottom: 0.2rem;
+        }
+        .mv-filter-note {
+            color: var(--ui-color-text-muted);
+            font-size: 0.88rem;
+            line-height: 1.5;
+            margin-bottom: 0.85rem;
         }
         .mv-filter-label {
-            color: #6b7280;
+            color: var(--ui-color-neutral-500);
             font-size: 0.76rem;
             font-weight: 700;
             letter-spacing: 0.04em;
             margin-bottom: 0.2rem;
+            text-transform: uppercase;
         }
         .mv-divider {
             height: 2.4rem;
@@ -159,8 +179,8 @@ def _inject_market_view_css():
             min-width: 160px;
         }
         .mv-kpi-card {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.06);
+            background: linear-gradient(180deg, var(--ui-color-surface), var(--ui-color-surface-soft));
+            border: 1px solid var(--ui-color-border);
             border-radius: 20px;
             padding: 1rem 1.05rem;
             min-height: 138px;
@@ -183,18 +203,29 @@ def _inject_market_view_css():
             font-size: 0.9rem;
         }
         .mv-section-title {
-            color: #111827;
+            color: var(--ui-color-neutral-900);
             font-size: 1.3rem;
             font-weight: 800;
             margin-bottom: 0.2rem;
         }
         .mv-section-subtitle {
-            color: #6b7280;
+            color: var(--ui-color-text-muted);
             font-size: 0.92rem;
             margin-bottom: 0.8rem;
         }
+        .mv-section-shell {
+            padding: 1rem 1.05rem 1.1rem 1.05rem;
+            background: linear-gradient(180deg, var(--ui-color-surface), var(--ui-color-surface-soft));
+            border: 1px solid var(--ui-color-border);
+            border-radius: var(--ui-radius-lg);
+            box-shadow: var(--ui-shadow-sm);
+            margin-bottom: 1rem;
+        }
+        .mv-section-top {
+            margin-bottom: 0.75rem;
+        }
         .mv-stat-card {
-            background: #f8fafc;
+            background: var(--ui-color-surface-muted);
             border: 1px solid rgba(148, 163, 184, 0.18);
             border-radius: 16px;
             padding: 0.8rem 0.9rem;
@@ -220,15 +251,15 @@ def _inject_market_view_css():
             font-weight: 700;
         }
         .mv-pill-up {
-            color: #027a48;
-            background: #ecfdf3;
+            color: var(--ui-color-secondary);
+            background: var(--ui-color-secondary-soft);
         }
         .mv-pill-down {
-            color: #b42318;
-            background: #fef3f2;
+            color: var(--ui-color-accent-danger);
+            background: var(--ui-color-accent-danger-soft);
         }
         .mv-pill-flat {
-            color: #475467;
+            color: var(--ui-color-neutral-600);
             background: #f2f4f7;
         }
         .mv-metrics-hero,
@@ -547,7 +578,7 @@ def _inject_market_view_css():
         }
         .mv-rank-table th {
             text-align: left;
-            color: #64748b;
+            color: var(--ui-color-neutral-500);
             font-size: 0.78rem;
             font-weight: 800;
             padding: 0.55rem 0.45rem;
@@ -563,7 +594,7 @@ def _inject_market_view_css():
             border-bottom: 0;
         }
         .mv-muted {
-            color: #6b7280;
+            color: var(--ui-color-text-muted);
         }
         .stTabs [data-baseweb="tab-list"] {
             gap: 0.45rem;
@@ -1175,7 +1206,7 @@ def _render_main_kpis_clean(metrics: dict[str, object], region_label: str, prese
         with st.container(border=True):
             st.caption(t("stable_yoy"))
             st.markdown(f"### {yoy_text}")
-            st.caption(tr("相对最近的去年稳定匹配点", "Relative to the nearest stable prior-year match"))
+            st.caption(t("market_view_prior_year_match_note"))
 
     if latest_available_point and latest_available_point != latest_point:
         st.caption(t("market_view_stability_note"))
@@ -1195,12 +1226,164 @@ def _render_main_kpis_clean(metrics: dict[str, object], region_label: str, prese
             with col_high:
                 st.caption(t("max_value"))
                 st.markdown(f"**{range_high}**")
-            st.caption(tr("所选时间范围内稳定中位价范围", "Stable median range within the selected time window"))
+            st.caption(t("market_view_stable_window_range_note"))
     with c5:
         with st.container(border=True):
             st.caption(t("sales_28d"))
             st.markdown(f"### {sales_text}")
-            st.caption(tr("最新稳定点滚动成交", "Rolling sales at the latest stable point"))
+            st.caption(t("market_view_stable_sales_note"))
+
+def _render_main_kpis_phase2(metrics: dict[str, object], region_label: str, preset: str, dwelling: str):
+    latest_point = fmt_date(metrics["latest_point"]) if metrics["latest_point"] is not None and not pd.isna(metrics["latest_point"]) else None
+    latest_available_point = (
+        fmt_date(metrics["latest_available_point"])
+        if metrics.get("latest_available_point") is not None and not pd.isna(metrics.get("latest_available_point"))
+        else None
+    )
+    latest_median_text = _format_currency(metrics["latest_median"])
+    range_low = _format_currency(metrics["range_low"])
+    range_high = _format_currency(metrics["range_high"])
+    sales_text = fmt_int(metrics["sales"]) if metrics["sales"] is not None and not pd.isna(metrics["sales"]) else "N/A"
+    context_label = f"{_preset_label(preset)} · {_dwelling_label(dwelling)}"
+
+    stable_yoy = metrics["stable_yoy"]
+    yoy_text = "N/A"
+    yoy_tone_class = "internal-chip"
+    if stable_yoy is not None and not pd.isna(stable_yoy):
+        stable_yoy = float(stable_yoy)
+        if stable_yoy > 0:
+            yoy_text = f"+{stable_yoy * 100:.1f}%"
+            yoy_tone_class = "internal-chip internal-chip-positive"
+        elif stable_yoy < 0:
+            yoy_text = f"{stable_yoy * 100:.1f}%"
+            yoy_tone_class = "internal-chip internal-chip-danger"
+        else:
+            yoy_text = "0.0%"
+            yoy_tone_class = "internal-chip internal-chip-caution"
+
+    st.markdown(
+        f"""
+        <div class="mv-section-shell">
+          <div class="mv-section-top">
+            <div class="mv-section-title">{escape(t("core_metrics"))}</div>
+            <div class="mv-section-subtitle">{escape(context_label)}</div>
+          </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    top_cols = st.columns(3)
+    top_cards = [
+        (
+            t("col_region"),
+            region_label,
+            context_label,
+            "",
+        ),
+        (
+            t("stable_median_price"),
+            latest_median_text,
+            f"{t('stable_as_of')} {latest_point}" if latest_point else f"{t('stable_as_of')} N/A",
+            f"{t('market_data_loaded_to')} {latest_available_point}" if latest_available_point and latest_available_point != latest_point else "",
+        ),
+        (
+            t("stable_yoy"),
+            yoy_text,
+            t("market_view_prior_year_match_note"),
+            yoy_tone_class,
+        ),
+    ]
+
+    for col, (label, value, caption, extra) in zip(top_cols, top_cards):
+        with col:
+            tone_html = ""
+            extra_html = ""
+            if extra.startswith("internal-chip"):
+                tone_html = f"<div class='{extra}' style='margin-top:0.6rem;width:fit-content;'>{escape(label)}</div>"
+            elif extra:
+                extra_html = f"<div class='internal-caption' style='margin-top:0.32rem;'>{escape(extra)}</div>"
+            st.markdown(
+                f"""
+                <div class="internal-card">
+                  <div class="internal-card-title">{escape(label)}</div>
+                  <div class="internal-metric-value">{escape(value)}</div>
+                  {tone_html}
+                  <div class="internal-help-text" style="margin-top:0.55rem;">{escape(caption)}</div>
+                  {extra_html}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    if latest_available_point and latest_available_point != latest_point:
+        st.markdown(
+            f"""
+            <div class="internal-warning-card" style="margin-top:0.85rem;">
+              <div class="internal-card-title">{escape(t("market_data_loaded_to"))}</div>
+              <div class="internal-help-text">{escape(t("market_view_stability_note"))}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    bottom_cols = st.columns(2)
+    with bottom_cols[0]:
+        st.markdown(
+            f"""
+            <div class="internal-card">
+              <div class="internal-card-title">{escape(t("median_range"))}</div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.7rem;margin-top:0.35rem;">
+                <div class="mv-stat-card">
+                  <div class="mv-stat-label">{escape(t("min_value"))}</div>
+                  <div class="mv-stat-value">{escape(range_low)}</div>
+                </div>
+                <div class="mv-stat-card">
+                  <div class="mv-stat-label">{escape(t("max_value"))}</div>
+                  <div class="mv-stat-value">{escape(range_high)}</div>
+                </div>
+              </div>
+              <div class="internal-caption" style="margin-top:0.65rem;">{escape(t("market_view_stable_window_range_note"))}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with bottom_cols[1]:
+        st.markdown(
+            f"""
+            <div class="internal-card">
+              <div class="internal-card-title">{escape(t("sales_28d"))}</div>
+              <div class="internal-metric-value">{escape(sales_text)}</div>
+              <div class="internal-help-text" style="margin-top:0.55rem;">{escape(t("market_view_stable_sales_note"))}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_market_status_strip(metrics: dict[str, object]) -> None:
+    latest_point = fmt_date(metrics["latest_point"]) if metrics.get("latest_point") is not None and not pd.isna(metrics.get("latest_point")) else "N/A"
+    latest_available_point = (
+        fmt_date(metrics["latest_available_point"])
+        if metrics.get("latest_available_point") is not None and not pd.isna(metrics.get("latest_available_point"))
+        else "N/A"
+    )
+    status_note = t("market_view_stability_note") if latest_available_point != "N/A" and latest_available_point != latest_point else t("market_view_data_status_note")
+    st.markdown(
+        f"""
+        <div class="internal-insight-card" style="margin-top:0.15rem;">
+          <div class="internal-card-title">{escape(t("market_view_data_status_title"))}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:0.45rem;margin:0.2rem 0 0.55rem 0;">
+            <span class="internal-chip">{escape(t("stable_as_of"))}: {escape(latest_point)}</span>
+            <span class="internal-chip">{escape(t("market_data_loaded_to"))}: {escape(latest_available_point)}</span>
+            <span class="internal-chip">{escape(t("market_view_prior_year_match_note"))}</span>
+          </div>
+          <div class="internal-help-text">{escape(status_note)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def _is_postcode_like_market_view_region(value: object) -> bool:
     text = str(value or "").strip()
@@ -1479,12 +1662,18 @@ def _resolve_region_selection(level: str, region_value_map: dict[str, str]):
 
 
 def _render_topbar(badge_date):
-    st.title(t("market_view_title"))
-    st.caption(t("market_view_note"))
+    badge = t("market_view_mode_public") if IS_PUBLIC_MODE else t("market_view_mode_internal")
+    note = t("market_view_note") if IS_PUBLIC_MODE else t("market_view_note_internal")
+    st.markdown(
+        f"<div class='mv-hero-shell'>{hero_block(title=t('market_view_title'), subtitle=note, badge=badge)}</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown(
         (
-            f'<div><span class="mv-badge">{escape(tr("Public Beta", "Public Beta"))}</span> '
-            f'<span class="mv-badge">{escape(t("data_as_of"))} {escape(fmt_date(badge_date))}</span></div>'
+            "<div class='mv-context-strip'>"
+            f"<span class='mv-context-chip'>{escape(t('data_as_of'))}: <strong>{escape(fmt_date(badge_date))}</strong></span>"
+            f"<span class='mv-context-chip'>{escape(t('market_view_selected_context'))}</span>"
+            "</div>"
         ),
         unsafe_allow_html=True,
     )
@@ -1543,6 +1732,63 @@ def _render_page_filter_bar(min_date, max_date):
             format_func=_data_level_option_label,
         )
     return level, preset, start_ts, end_ts, STABLE_RATIO
+
+
+def _render_market_control_panel(
+    current_dwelling: str,
+    min_date,
+    max_date,
+    *,
+    level: str,
+    region_options: list[str],
+):
+    with st.container(border=True):
+        st.markdown(
+            f"<div class='mv-filter-shell'><div class='mv-filter-title'>{escape(t('market_view_controls_title'))}</div>"
+            f"<div class='mv-filter-note'>{escape(t('market_view_controls_note'))}</div>",
+            unsafe_allow_html=True,
+        )
+        control_cols = st.columns([1.0, 1.35, 1.15, 1.15, 0.9])
+        with control_cols[0]:
+            dwelling = _render_external_dwelling_switch(current_dwelling)
+        with control_cols[1]:
+            level, preset, start_ts, end_ts, stable_ratio = _render_page_filter_bar(min_date, max_date)
+        with control_cols[2]:
+            selector_label = _region_selector_label(level)
+            st.markdown(f'<div class="mv-filter-label">{escape(selector_label)}</div>', unsafe_allow_html=True)
+            if level == "NSW":
+                st.text_input(selector_label, value="NSW", disabled=True, label_visibility="collapsed", key="mv_chart_region_nsw")
+            elif level in {"REGION", "REGION16"}:
+                st.selectbox(selector_label, options=region_options, key=f"mv_chart_region_{level.lower()}", label_visibility="collapsed")
+            else:
+                st.selectbox(selector_label, options=region_options, key="mv_chart_region_area", label_visibility="collapsed", placeholder=t("search_suburb_or_postcode"))
+        with control_cols[3]:
+            st.markdown(f'<div class="mv-filter-label">{escape(t("display_mode"))}</div>', unsafe_allow_html=True)
+            _normalize_display_mode_state("mv_chart_display_mode")
+            chart_display_mode_label = st.selectbox(
+                t("display_mode"),
+                _display_mode_options(),
+                index=0,
+                key="mv_chart_display_mode",
+                label_visibility="collapsed",
+            )
+            chart_display_mode = _coerce_display_mode(chart_display_mode_label)
+        with control_cols[4]:
+            st.markdown(f'<div class="mv-filter-label">{escape(t("data_as_of"))}</div>', unsafe_allow_html=True)
+            st.markdown(f"**{fmt_date(max_date)}**")
+            st.caption(tr("当前滚动数据的最新可见日期", "Latest visible date loaded into the rolling market data"))
+        st.markdown("</div>", unsafe_allow_html=True)
+    return dwelling, level, preset, start_ts, end_ts, stable_ratio, chart_display_mode
+
+
+def _render_context_strip(region_label: str, level: str, preset: str, dwelling: str):
+    context_items = [
+        f"{_level_label(level)}: {region_label}",
+        f"{t('dwelling_group')}: {_dwelling_label(dwelling)}",
+        f"{t('time_range')}: {_preset_label(preset)}",
+    ]
+    chips = "".join(f"<span class='mv-context-chip'>{escape(item)}</span>" for item in context_items)
+    st.markdown(f"<div class='mv-context-strip'>{chips}</div>", unsafe_allow_html=True)
 
 
 def _build_band_chart_frame(filtered: pl.DataFrame, stable_ratio: float) -> pd.DataFrame:
@@ -1763,11 +2009,25 @@ def main():
     min_date = seed_daily["date"].min()
     max_date = seed_daily["date"].max()
     _render_topbar(max_date)
-    dwelling = _render_external_dwelling_switch(dwelling)
-    level, preset, start_ts, end_ts, stable_ratio = _render_page_filter_bar(min_date, max_date)
-    _normalize_display_mode_state("mv_chart_display_mode")
-    chart_display_mode = _coerce_display_mode(st.session_state.get("mv_chart_display_mode"))
+    level = str(st.session_state.get("mv_level", "NSW") or "NSW")
     with perf.track("level_data_load"):
+        current_daily = _load_level_daily(level)
+    if current_daily.is_empty():
+        st.error(t("no_data"))
+        return
+    current_daily = current_daily.with_columns(pl.col("region").cast(pl.Utf8).str.strip_chars())
+    region_options, region_value_map = _resolve_region_options(level, current_daily)
+    _ensure_default_region(level, region_options)
+    dwelling, level, preset, start_ts, end_ts, stable_ratio, chart_display_mode = _render_market_control_panel(
+        dwelling,
+        min_date,
+        max_date,
+        level=level,
+        region_options=region_options,
+    )
+    if level != str(st.session_state.get("mv_level", level)):
+        level = str(st.session_state.get("mv_level", level))
+    with perf.track("level_data_load_post_control"):
         current_daily = _load_level_daily(level)
     if current_daily.is_empty():
         st.error(t("no_data"))
@@ -1842,34 +2102,21 @@ def main():
             )
             plot_df = plot_df_all[(plot_df_all["event_time"] >= start_ts) & (plot_df_all["event_time"] <= end_ts)].copy()
 
-        chart_card = st.container(border=True)
+        _render_main_kpis_phase2(
+            focus_metrics,
+            region_label=region_label,
+            preset=preset,
+            dwelling=dwelling,
+        )
+
+        chart_card = st.container(border=False)
         with chart_card:
-            header_cols = st.columns([3.3, 1.5, 1.35])
-            header_cols[0].markdown(
+            st.markdown("<div class='mv-section-shell'>", unsafe_allow_html=True)
+            st.markdown(
                 f'<div class="mv-section-title">{escape(t("rolling_median_trend"))}</div>'
                 f'<div class="mv-section-subtitle">{escape(t("rolling_median_trend_note"))}</div>',
                 unsafe_allow_html=True,
             )
-            with header_cols[1]:
-                selector_label = _region_selector_label(level)
-                st.markdown(f'<div class="mv-filter-label">{escape(selector_label)}</div>', unsafe_allow_html=True)
-                if level == "NSW":
-                    st.text_input(selector_label, value="NSW", disabled=True, label_visibility="collapsed", key="mv_chart_region_nsw")
-                elif level in {"REGION", "REGION16"}:
-                    st.selectbox(selector_label, options=region_options, key=f"mv_chart_region_{level.lower()}", label_visibility="collapsed")
-                else:
-                    st.selectbox(selector_label, options=region_options, key="mv_chart_region_area", label_visibility="collapsed", placeholder=t("search_suburb_or_postcode"))
-            with header_cols[2]:
-                st.markdown(f'<div class="mv-filter-label">{escape(t("display_mode"))}</div>', unsafe_allow_html=True)
-                _normalize_display_mode_state("mv_chart_display_mode")
-                chart_display_mode_label = st.selectbox(
-                    t("display_mode"),
-                    _display_mode_options(),
-                    index=0,
-                    key="mv_chart_display_mode",
-                    label_visibility="collapsed",
-                )
-                chart_display_mode = _coerce_display_mode(chart_display_mode_label)
             anchor_points = pd.DataFrame()
             if (
                 focus_metrics.get("latest_point") is not None
@@ -1900,17 +2147,11 @@ def main():
                 anchor_points=anchor_points,
             )
             st.plotly_chart(chart, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown(f"### {t('core_metrics')}")
-        _render_main_kpis_clean(
-            focus_metrics,
-            region_label=region_label,
-            preset=preset,
-            dwelling=dwelling,
-        )
-
-        band_card = st.container(border=True)
+        band_card = st.container(border=False)
         with band_card:
+            st.markdown("<div class='mv-section-shell'>", unsafe_allow_html=True)
             with perf.track("band_data_load"):
                 band_data = load_price_band_data(level, tuple(regions_selected), dwelling)
             st.markdown(
@@ -1967,7 +2208,7 @@ def main():
                     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
                     shown_bands = [band for band in selected_bands if band in band_summary["band"].tolist()]
                     st.markdown(
-                        f'<div class="mv-band-summary-descriptor">{escape(tr("各价格带最新稳定中位价与稳定同比", "Latest stable median and stable YoY by price band"))}</div>',
+                        f'<div class="mv-band-summary-descriptor">{escape(t("market_view_band_summary_descriptor"))}</div>',
                         unsafe_allow_html=True,
                     )
                     band_cols = st.columns(max(len(shown_bands), 1))
@@ -1981,11 +2222,13 @@ def main():
                               <div class="mv-band-label">{escape(band)}</div>
                               <div class="mv-band-value">{escape(_format_currency(median))}</div>
                               <div class="mv-band-yoy-row">{_band_yoy_pill_html(yoy)}</div>
-                              <div class="mv-band-summary-sub">{escape(tr("相对最近的去年稳定匹配点", "Relative to the nearest stable prior-year match"))}</div>
+                              <div class="mv-band-summary-sub">{escape(t("market_view_prior_year_match_note"))}</div>
                             </div>
                             """,
                             unsafe_allow_html=True,
                         )
+            st.markdown("</div>", unsafe_allow_html=True)
+        _render_market_status_strip(focus_metrics)
     timing_payload = perf.log(
         dwelling=dwelling,
         level=level,
