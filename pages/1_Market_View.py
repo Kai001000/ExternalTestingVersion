@@ -10,7 +10,7 @@ import streamlit as st
 
 from utils.charts import DISPLAY_MODE_DUAL, DISPLAY_MODE_LONG, DISPLAY_MODE_SHORT, build_band_chart, build_interactive_chart
 from utils.config import BASE_DIR, IS_PUBLIC_MODE
-from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, _expand_region16_segments_daily, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales
+from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, _expand_region16_segments_daily, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales, load_public_market_view_price_band_snapshot
 from utils.i18n import ensure_lang, t, tr
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_float0, fmt_int, fmt_pct
@@ -1523,6 +1523,9 @@ def _compute_price_band_data(fact: pl.DataFrame) -> pl.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_price_band_data(level: str, regions_selected: tuple[str, ...], dwelling: str) -> pl.DataFrame:
+    if IS_PUBLIC_MODE:
+        return load_public_market_view_price_band_snapshot(level, regions_selected, dwelling)
+
     fact = _scope_price_band_fact_sales(level, list(regions_selected), dwelling)
     if fact.is_empty():
         return pl.DataFrame()
@@ -2047,7 +2050,7 @@ def main():
     with perf.track("source_data_load"):
         seed_daily = load_daily_rolling("NSW")
     if seed_daily.is_empty():
-        st.error(t("market_view_missing_daily"))
+        st.error(t("market_view_missing_public_daily") if IS_PUBLIC_MODE else t("market_view_missing_daily"))
         return
     min_date = seed_daily["date"].min()
     max_date = seed_daily["date"].max()
@@ -2184,7 +2187,7 @@ def main():
                 unsafe_allow_html=True,
             )
             if band_data.is_empty():
-                st.info(t("market_view_no_band_data"))
+                st.info(t("market_view_public_no_band_data") if IS_PUBLIC_MODE else t("market_view_no_band_data"))
             else:
                 filtered_band = band_data.filter((pl.col("date") >= start_ts) & (pl.col("date") <= end_ts))
                 available_bands = band_data["price_band"].unique().to_list()

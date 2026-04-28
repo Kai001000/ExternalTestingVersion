@@ -3,10 +3,13 @@ from pathlib import Path
 
 # ====== project paths ======
 BASE_DIR = Path(__file__).resolve().parent.parent
+PUBLIC_MARKET_VIEW_DIR = BASE_DIR / "data" / "public_market_view"
+PUBLIC_MARKET_VIEW_DAILY_DIR = PUBLIC_MARKET_VIEW_DIR / "daily_rolling"
+PUBLIC_MARKET_VIEW_PRICE_BAND_DIR = PUBLIC_MARKET_VIEW_DIR / "price_band"
 
-MART_WEEKLY_DIR = BASE_DIR / "Processed" / "mart_weekly"          # 仍保留（排名表可能还需要）
-MART_MONTHLY_DIR = BASE_DIR / "Processed" / "mart_monthly"        # 仍保留（备用）
-MART_DAILY_ROLLING_DIR = BASE_DIR / "Processed" / "mart_daily_rolling"   # 新增
+MART_WEEKLY_DIR = BASE_DIR / "Processed" / "mart_weekly"
+MART_MONTHLY_DIR = BASE_DIR / "Processed" / "mart_monthly"
+MART_DAILY_ROLLING_DIR = BASE_DIR / "Processed" / "mart_daily_rolling"
 
 # ====== guards ======
 PRICE_MAX = 100_000_000
@@ -19,7 +22,7 @@ if APP_MODE not in {"internal", "external"}:
 IS_INTERNAL_MODE = APP_MODE == "internal"
 IS_PUBLIC_MODE = APP_MODE == "external"
 
-# rolling windows (in weeks) – 可能不再使用，但保留
+# rolling windows (in weeks)
 ROLL_WINDOWS = {
     "roll4": 4,
     "roll13": 13,

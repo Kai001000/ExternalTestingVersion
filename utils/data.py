@@ -1,3 +1,4 @@
+import hashlib
 import json
 import math
 import re
@@ -15,10 +16,13 @@ from .config import (
     CURRENT_RENT_CLASSIFICATION_JSONL,
     DOMAIN_RENT_LISTINGS_ENV_VAR,
     DOMAIN_SALE_LISTINGS_ENV_VAR,
+    IS_PUBLIC_MODE,
     LEGACY_DOMAIN_RENT_LISTINGS_PARQUET,
     LEGACY_DOMAIN_SALE_LISTINGS_PARQUET,
     MART_MONTHLY_DIR,
     MART_WEEKLY_DIR,
+    PUBLIC_MARKET_VIEW_DAILY_DIR,
+    PUBLIC_MARKET_VIEW_PRICE_BAND_DIR,
     STANDARD_RESIDENTIAL_LISTING_CLASSIFICATION,
 )
 
@@ -30,6 +34,7 @@ ADAPTIVE_LOWER_MULTIPLIER = 0.7
 ADAPTIVE_UPPER_MULTIPLIER = 1.5
 ADAPTIVE_MIN_HISTORY_ROWS = 50
 ALLOWED_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
+EXTERNAL_MARKET_VIEW_FACT_BYTES_THRESHOLD = 40_000_000
 # Legacy internal token = REGION16.
 # Canonical product-facing name = Market Region.
 REGION16_SEGMENT_DEFINITIONS = (
@@ -1151,7 +1156,32 @@ def load_daily_rolling(level: str) -> pl.DataFrame:
     level = _normalize_level(level)
     if level not in {"NSW", "REGION", "REGION16", "SUBURB", "POSTCODE"}:
         return pl.DataFrame()
+    if IS_PUBLIC_MODE:
+        return _load_public_daily_rolling(level)
     return _build_filtered_daily_rolling(level)
+
+
+def _public_daily_rolling_snapshot_path(level: str) -> Path:
+    snapshot_map = {
+        "NSW": PUBLIC_MARKET_VIEW_DAILY_DIR / "daily_rolling_nsw.parquet",
+        "REGION": PUBLIC_MARKET_VIEW_DAILY_DIR / "daily_rolling_region.parquet",
+        "REGION16": PUBLIC_MARKET_VIEW_DAILY_DIR / "daily_rolling_region16.parquet",
+        "SUBURB": PUBLIC_MARKET_VIEW_DAILY_DIR / "daily_rolling_suburb.parquet",
+        "POSTCODE": PUBLIC_MARKET_VIEW_DAILY_DIR / "daily_rolling_postcode.parquet",
+    }
+    return snapshot_map[level]
+
+
+@st.cache_data(show_spinner=False)
+def _load_public_daily_rolling(level: str) -> pl.DataFrame:
+    path = _public_daily_rolling_snapshot_path(level)
+    if not path.exists():
+        return pl.DataFrame()
+
+    daily = pl.read_parquet(path)
+    if "date" in daily.columns:
+        daily = daily.with_columns(pl.col("date").cast(pl.Date))
+    return daily
 
 
 def _clean_region_series(s: pd.Series) -> pd.Series:
@@ -1346,6 +1376,34 @@ def load_filtered_fact_sales() -> pl.DataFrame:
         )
 
     return fact.select(["suburb", "postcode", "date", "purchase_price", "dwelling_group"])
+
+
+def load_public_market_view_price_band_snapshot(level: str, regions_selected: tuple[str, ...], dwelling: str) -> pl.DataFrame:
+    if not IS_PUBLIC_MODE:
+        return pl.DataFrame()
+
+    scope_payload = json.dumps(
+        {
+            "level": str(level or "").strip().upper(),
+            "dwelling": str(dwelling or "").strip().upper(),
+            "regions": [str(region).strip() for region in regions_selected],
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+    scope_hash = hashlib.sha1(scope_payload.encode("utf-8")).hexdigest()[:12]
+    snapshot_path = PUBLIC_MARKET_VIEW_PRICE_BAND_DIR / f"market_view_price_band_{scope_hash}.parquet"
+    if snapshot_path.exists():
+        return pl.read_parquet(snapshot_path)
+
+    fact_dir = BASE_DIR / "Processed" / "fact_sales"
+    fact_bytes = sum(path.stat().st_size for path in fact_dir.glob("fact_sales_*.parquet") if path.exists())
+    if fact_bytes > EXTERNAL_MARKET_VIEW_FACT_BYTES_THRESHOLD:
+        print(
+            "[market-view] external mode skipped full fact_sales load for price-band data "
+            f"because committed fact parquet size is {fact_bytes} bytes."
+        )
+    return pl.DataFrame()
 
 
 def _build_filtered_daily_rolling(level: str) -> pl.DataFrame:

@@ -40,5 +40,16 @@ Reference/ABS/__pycache__/
 # Large raw ABS source zip
 Reference/ABS/SAL_2021_AUST_GDA2020_SHP.zip
 
+# Local data isolation
+Processed/
+data/cache/
+data/current/
+!data/public_market_view/
+!data/public_market_view/**
+logs/
+reports/
+RawData/*.zip
+RawData/**/*.zip
+
 # Local notes/docs folder
 项目说明/
