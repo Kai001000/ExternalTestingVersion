@@ -1855,6 +1855,27 @@ def _build_band_chart_frame(filtered: pl.DataFrame, stable_ratio: float) -> pd.D
     return apply_right_edge_stability_rule(chart_df, ["price_band"], "date", "raw_stable", "stable")
 
 
+def _resolve_nearest_stable_prior_row(stable_df: pd.DataFrame, date_col: str, latest_anchor_date: pd.Timestamp) -> pd.Series | None:
+    if stable_df is None or stable_df.empty or latest_anchor_date is None or pd.isna(latest_anchor_date):
+        return None
+
+    target_date = pd.to_datetime(latest_anchor_date, errors="coerce").normalize() - pd.Timedelta(days=365)
+    if pd.isna(target_date):
+        return None
+
+    prior_candidates = stable_df.copy()
+    prior_candidates[date_col] = pd.to_datetime(prior_candidates[date_col], errors="coerce").dt.normalize()
+    prior_candidates = prior_candidates[prior_candidates[date_col].notna()].copy()
+    if prior_candidates.empty:
+        return None
+
+    prior_candidates["_abs_day_gap"] = (prior_candidates[date_col] - target_date).abs().dt.days
+    prior_candidates = prior_candidates.sort_values(["_abs_day_gap", date_col])
+    if prior_candidates.empty:
+        return None
+    return prior_candidates.iloc[0]
+
+
 def _calc_band_summary(visible_filtered: pl.DataFrame, full_history: pl.DataFrame, stable_ratio: float) -> tuple[pd.DataFrame, pd.DataFrame]:
     if visible_filtered.is_empty():
         return pd.DataFrame(), pd.DataFrame(columns=["band", "median", "yoy", "anchor_date"])
@@ -1872,12 +1893,11 @@ def _calc_band_summary(visible_filtered: pl.DataFrame, full_history: pl.DataFram
         latest = full_band_df.iloc[-1]
         latest_date = pd.to_datetime(latest["date"]).normalize()
         target_date = latest_date - pd.DateOffset(years=1)
-        ref_df = full_band_df.assign(date_gap=(full_band_df["date"] - target_date).abs())
-        ref_df = ref_df[ref_df["date_gap"] <= pd.Timedelta(days=14)].sort_values(["date_gap", "date"])
+        prior_row = _resolve_nearest_stable_prior_row(full_band_df, "date", latest_date)
         yoy = "no_prior_stable_match"
-        match_found = not ref_df.empty
-        if not ref_df.empty:
-            ref_price = ref_df.iloc[0]["rolling_median"]
+        match_found = prior_row is not None
+        if prior_row is not None:
+            ref_price = prior_row["rolling_median"]
             if pd.notna(ref_price) and float(ref_price) != 0:
                 yoy = float(latest["rolling_median"]) / float(ref_price) - 1.0
             else:
