@@ -88,6 +88,12 @@ BUY_SORT_SPECS: dict[str, tuple[str, bool]] = {
     "suburb_asc": ("suburb", True),
 }
 
+CORE_LISTING_BADGE = "Core listing"
+EXTENDED_LISTING_BADGE = "Extended validated listing"
+EXTENDED_LISTING_CAPTION = "Extended listings are validated from an external source and may not appear on Domain."
+EXTENDED_LAYER_ROOT = Path(__file__).resolve().parents[2] / "BeautifulDataSource" / "data" / "extended" / "onthehouse_validated"
+EXTENDED_SOURCE_FILTER_OPTIONS = ["Show all", "Show core only", "Show extended only"]
+
 st.markdown(
     """
     <style>
@@ -375,6 +381,192 @@ def _count_label(value: float | int | None) -> str:
 
 def _feature_triplet(row: pd.Series) -> str:
     return f"{_count_label(row.get('bedrooms'))} / {_count_label(row.get('bathrooms'))} / {_count_label(row.get('parking'))}"
+
+
+def _is_extended_listing(row: pd.Series | dict[str, object]) -> bool:
+    value = row.get("listing_layer") if isinstance(row, dict) else row.get("listing_layer")
+    return str(value or "").strip().lower() == "extended"
+
+
+def _source_badge_for_row(row: pd.Series | dict[str, object]) -> str:
+    value = row.get("source_badge") if isinstance(row, dict) else row.get("source_badge")
+    text = str(value or "").strip()
+    if text:
+        return text
+    return EXTENDED_LISTING_BADGE if _is_extended_listing(row) else CORE_LISTING_BADGE
+
+
+def _with_core_listing_badge(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df.copy()
+    result = df.copy()
+    if "source_badge" not in result.columns:
+        result["source_badge"] = CORE_LISTING_BADGE
+    else:
+        result["source_badge"] = result["source_badge"].fillna(CORE_LISTING_BADGE).replace("", CORE_LISTING_BADGE)
+    if "listing_layer" not in result.columns:
+        result["listing_layer"] = "core"
+    else:
+        result["listing_layer"] = result["listing_layer"].fillna("core").replace("", "core")
+    if "source_name" not in result.columns:
+        result["source_name"] = "domain"
+    else:
+        result["source_name"] = result["source_name"].fillna("domain").replace("", "domain")
+    if "public_export_enabled" not in result.columns:
+        result["public_export_enabled"] = True
+    return result
+
+
+def _latest_extended_listing_path() -> Path | None:
+    if not EXTENDED_LAYER_ROOT.exists():
+        return None
+    candidates = sorted(
+        EXTENDED_LAYER_ROOT.glob("*/onthehouse_validated_listings.parquet"),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def _parse_extended_price_bounds(price_raw: object) -> tuple[float | None, float | None, str, bool]:
+    text = str(price_raw or "").strip()
+    if not text:
+        return None, None, "Price on request", False
+    lowered = text.lower()
+    if "auction" in lowered:
+        return None, None, text, False
+    amounts: list[float] = []
+    for match in re.findall(r"\$?\s*([0-9][0-9,]*(?:\.[0-9]+)?)(\s*[kKmM])?", text):
+        number_text, suffix = match
+        try:
+            amount = float(number_text.replace(",", ""))
+        except ValueError:
+            continue
+        suffix = suffix.strip().lower()
+        if suffix == "k":
+            amount *= 1_000
+        elif suffix == "m":
+            amount *= 1_000_000
+        if amount >= 10_000:
+            amounts.append(amount)
+    if not amounts:
+        return None, None, text, False
+    price_min = min(amounts)
+    price_max = max(amounts)
+    return price_min, price_max, text, True
+
+
+def _load_validated_extended_listings_for_browser() -> pd.DataFrame:
+    path = _latest_extended_listing_path()
+    if path is None:
+        print("[Buy Budget] Extended listings loaded: 0")
+        return pd.DataFrame()
+    try:
+        raw = pd.read_parquet(path)
+    except Exception as exc:
+        print(f"[Buy Budget] Extended listings load failed: {exc}")
+        return pd.DataFrame()
+    if raw.empty:
+        print("[Buy Budget] Extended listings loaded: 0")
+        return pd.DataFrame()
+
+    rows: list[dict[str, object]] = []
+    for _, item in raw.copy().iterrows():
+        listing_type = str(item.get("listing_type") or "").strip().lower()
+        if listing_type and listing_type != "sale":
+            continue
+        price_min, price_max, price_display, has_price = _parse_extended_price_bounds(item.get("price_raw"))
+        price_mid = None if price_min is None or price_max is None else (price_min + price_max) / 2
+        source_record_id = str(item.get("source_record_id") or item.get("listing_id") or "").strip()
+        listing_id = str(item.get("listing_id") or f"oth_{source_record_id}").strip()
+        rows.append(
+            {
+                "listing_id": listing_id,
+                "address": item.get("address"),
+                "suburb": item.get("suburb"),
+                "postcode": str(item.get("postcode") or "").strip(),
+                "listing_type": "sale",
+                "price_raw": item.get("price_raw"),
+                "price_display": price_display,
+                "price_mid": price_mid,
+                "price_filter_min": price_min,
+                "price_filter_max": price_max,
+                "has_price": bool(has_price),
+                "bedrooms": pd.to_numeric(item.get("bedrooms"), errors="coerce"),
+                "bathrooms": pd.to_numeric(item.get("bathrooms"), errors="coerce"),
+                "parking": pd.to_numeric(item.get("parking"), errors="coerce"),
+                "property_group": "extended",
+                "property_group_label": "Extended",
+                "property_subtype": "validated listing",
+                "listing_date": pd.to_datetime(item.get("signal_last_seen_at"), errors="coerce"),
+                "source_url": item.get("source_url"),
+                "url": item.get("source_url"),
+                "agency_name": pd.NA,
+                "land_size": pd.NA,
+                "main_image": pd.NA,
+                "latitude": pd.NA,
+                "longitude": pd.NA,
+                "source_name": "onthehouse",
+                "source_record_id": source_record_id,
+                "source_badge": EXTENDED_LISTING_BADGE,
+                "listing_layer": "extended",
+                "public_export_enabled": False,
+            }
+        )
+    result = pd.DataFrame(rows)
+    print(f"[Buy Budget] Extended listings loaded: {len(result)}")
+    return result
+
+
+def _filter_extended_listings_for_browser(
+    extended: pd.DataFrame,
+    *,
+    budget_min: int,
+    budget_max: int,
+    min_budget: int,
+    max_budget: int,
+    selected_suburbs: list[str] | None,
+    selected_postcodes: list[str] | None,
+    min_bedrooms: int,
+    min_bathrooms: int,
+    min_parking: int,
+    exact_bedrooms: bool,
+    exact_bathrooms: bool,
+    exact_parking: bool,
+    allowed_suburbs: list[str] | None,
+) -> pd.DataFrame:
+    if extended.empty:
+        return extended.copy()
+    filtered, _ = _apply_budget_filters(
+        extended,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        min_budget=min_budget,
+        max_budget=max_budget,
+        selected_suburbs=selected_suburbs,
+        selected_postcodes=selected_postcodes,
+        min_bedrooms=min_bedrooms,
+        min_bathrooms=min_bathrooms,
+        min_parking=min_parking,
+        exact_bedrooms=exact_bedrooms,
+        exact_bathrooms=exact_bathrooms,
+        exact_parking=exact_parking,
+        allowed_listing_ids=None,
+        allowed_suburbs=allowed_suburbs,
+        skip_filters={"property_group", "property_subtype"},
+    )
+    return filtered
+
+
+def _filter_browser_listing_source(display: pd.DataFrame, mode: str) -> pd.DataFrame:
+    if display.empty or mode == "Show all":
+        return display.copy()
+    is_extended = display.get("listing_layer", pd.Series(index=display.index, dtype=object)).astype(str).str.lower() == "extended"
+    if mode == "Show extended only":
+        return display.loc[is_extended].copy()
+    if mode == "Show core only":
+        return display.loc[~is_extended].copy()
+    return display.copy()
 
 
 def _land_size_label(value: float | int | None) -> str:
@@ -4442,16 +4634,27 @@ def _render_external_listing_detail(
             on_click=_clear_selected_listing,
         )
     with header_cols[1]:
+        is_extended = _is_extended_listing(row)
         shortlisted = str(row["listing_id"]) in _get_shortlist_ids()
-        action_label = tr("移出 shortlist", "Remove") if shortlisted else tr("加入 shortlist", "Shortlist")
-        st.button(
-            action_label,
-            key=f"buy_detail_shortlist_{row['listing_id']}",
-            use_container_width=True,
-            on_click=_toggle_shortlist_callback,
-            args=(str(row["listing_id"]), _snapshot_listing(row)),
-        )
-    st.markdown(f"<div class='budget-panel-eyebrow'>{tr('当前聚焦 suburb', 'Focused suburb')}</div>", unsafe_allow_html=True)
+        action_label = tr("Remove", "Remove") if shortlisted else tr("Shortlist", "Shortlist")
+        if is_extended:
+            st.button(
+                tr("View only", "View only"),
+                key=f"buy_detail_shortlist_{row['listing_id']}",
+                use_container_width=True,
+                disabled=True,
+            )
+        else:
+            st.button(
+                action_label,
+                key=f"buy_detail_shortlist_{row['listing_id']}",
+                use_container_width=True,
+                on_click=_toggle_shortlist_callback,
+                args=(str(row["listing_id"]), _snapshot_listing(row)),
+            )
+    st.markdown(f"<div class='budget-panel-eyebrow'>{tr('Focused suburb', 'Focused suburb')} / {_source_badge_for_row(row)}</div>", unsafe_allow_html=True)
+    if _is_extended_listing(row):
+        st.caption(EXTENDED_LISTING_CAPTION)
     st.markdown(f"<div class='budget-card-price'>{_external_listing_price_label(row)}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='budget-card-address'>{row['address'] if pd.notna(row.get('address')) else 'N/A'}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='budget-card-meta'>{row['suburb'] if pd.notna(row.get('suburb')) else 'N/A'} / {row['postcode'] if pd.notna(row.get('postcode')) else 'N/A'}</div>", unsafe_allow_html=True)
@@ -4748,7 +4951,8 @@ def _render_external_listing_panel(
               <div class="budget-card-address">{row['address'] if pd.notna(row.get('address')) else 'N/A'}</div>
               <div class="budget-card-meta">
                 {row['suburb'] if pd.notna(row.get('suburb')) else 'N/A'} / {row['postcode'] if pd.notna(row.get('postcode')) else 'N/A'}<br>
-                {row['property_group_label']} / {_title_case_subtype(row['property_subtype'])} • {tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}
+                {row['property_group_label']} / {_title_case_subtype(row['property_subtype'])} / {tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}<br>
+                {_source_badge_for_row(row)}
               </div>
             </div>
             """,
@@ -4762,14 +4966,22 @@ def _render_external_listing_panel(
             on_click=_set_panel_listing_callback,
             args=(str(row["listing_id"]), str(row.get("suburb") or "")),
         )
-        shortlisted = str(row["listing_id"]) in _get_shortlist_ids()
-        row_cols[1].button(
-            tr("已选", "Saved") if shortlisted else tr("收藏", "Shortlist"),
-            key=f"budget_panel_shortlist_{row['listing_id']}",
-            use_container_width=True,
-            on_click=_toggle_shortlist_callback,
-            args=(str(row["listing_id"]), _snapshot_listing(row)),
-        )
+        if _is_extended_listing(row):
+            row_cols[1].button(
+                tr("View only", "View only"),
+                key=f"budget_panel_shortlist_{row['listing_id']}",
+                use_container_width=True,
+                disabled=True,
+            )
+        else:
+            shortlisted = str(row["listing_id"]) in _get_shortlist_ids()
+            row_cols[1].button(
+                tr("Saved", "Saved") if shortlisted else tr("Shortlist", "Shortlist"),
+                key=f"budget_panel_shortlist_{row['listing_id']}",
+                use_container_width=True,
+                on_click=_toggle_shortlist_callback,
+                args=(str(row["listing_id"]), _snapshot_listing(row)),
+            )
     st.markdown("<div class='budget-panel-footer'>", unsafe_allow_html=True)
     pager_cols = st.columns([1, 1.3, 1])
     pager_cols[0].button(
@@ -5639,8 +5851,63 @@ def main() -> None:
             focused_suburb=selected_suburb,
             selected_listing_id=selected_listing_id,
         )
-    display_listings = _prepare_external_display_listings(filtered_listings, sort_column=sort_column, sort_ascending=sort_ascending)
-    all_display_listings = _prepare_external_display_listings(df, sort_column=sort_column, sort_ascending=sort_ascending)
+    display_listings = _with_core_listing_badge(_prepare_external_display_listings(filtered_listings, sort_column=sort_column, sort_ascending=sort_ascending))
+    all_display_listings = _with_core_listing_badge(_prepare_external_display_listings(df, sort_column=sort_column, sort_ascending=sort_ascending))
+    browser_display_listings = display_listings.copy()
+    browser_all_display_listings = all_display_listings.copy()
+    include_extended_listings = False
+    extended_source_filter = "Show all"
+    if not IS_PUBLIC_MODE:
+        with st.container(border=True):
+            include_extended_listings = st.toggle(
+                "Include validated extended listings (OnTheHouse)",
+                value=False,
+                key="budget_include_validated_extended_listings",
+            )
+            if include_extended_listings:
+                st.caption(EXTENDED_LISTING_CAPTION)
+                extended_source_filter = st.selectbox(
+                    "Listing source view",
+                    EXTENDED_SOURCE_FILTER_OPTIONS,
+                    index=0,
+                    key="budget_extended_listing_source_filter",
+                )
+                extended_all_listings = _load_validated_extended_listings_for_browser()
+                extended_filtered_listings = _filter_extended_listings_for_browser(
+                    extended_all_listings,
+                    budget_min=budget_min,
+                    budget_max=budget_max,
+                    min_budget=min_budget,
+                    max_budget=max_budget,
+                    selected_suburbs=selected_suburbs,
+                    selected_postcodes=selected_postcodes,
+                    min_bedrooms=min_bedrooms,
+                    min_bathrooms=min_bathrooms,
+                    min_parking=min_parking,
+                    exact_bedrooms=exact_bedrooms,
+                    exact_bathrooms=exact_bathrooms,
+                    exact_parking=exact_parking,
+                    allowed_suburbs=commute_allowed_suburbs,
+                )
+                if extended_all_listings.empty:
+                    extended_display_listings = pd.DataFrame(columns=display_listings.columns)
+                    extended_all_display_listings = pd.DataFrame(columns=all_display_listings.columns)
+                else:
+                    extended_display_listings = _prepare_external_display_listings(
+                        extended_filtered_listings,
+                        sort_column=sort_column,
+                        sort_ascending=sort_ascending,
+                    )
+                    extended_all_display_listings = _prepare_external_display_listings(
+                        extended_all_listings,
+                        sort_column=sort_column,
+                        sort_ascending=sort_ascending,
+                    )
+                browser_display_listings = pd.concat([display_listings, extended_display_listings], ignore_index=True, sort=False)
+                browser_all_display_listings = pd.concat([all_display_listings, extended_all_display_listings], ignore_index=True, sort=False)
+                browser_display_listings = _filter_browser_listing_source(browser_display_listings, extended_source_filter)
+                browser_all_display_listings = _filter_browser_listing_source(browser_all_display_listings, extended_source_filter)
+                print(f"[Buy Budget] Combined listing count: {len(browser_display_listings)}")
     with perf.track("ranking_table_prep"):
         suburb_summary = ranked_suburb_summary
 
@@ -5654,11 +5921,11 @@ def main() -> None:
         selected_suburb = "__ALL__"
 
     focused_listings = matched_filtered_listings.loc[matched_filtered_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else matched_filtered_listings.copy()
-    focused_display_listings = display_listings.loc[display_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else display_listings.copy()
+    focused_display_listings = browser_display_listings.loc[browser_display_listings["suburb"] == selected_suburb].copy() if selected_suburb != "__ALL__" else browser_display_listings.copy()
     browser_scope_mode = _browser_scope_mode()
     browser_listings, focused_match_count = _resolve_focused_suburb_browser_rows(
-        display_listings,
-        all_display_listings,
+        browser_display_listings,
+        browser_all_display_listings,
         selected_suburb=selected_suburb,
         browser_scope_mode=browser_scope_mode,
     )
@@ -5786,8 +6053,8 @@ def main() -> None:
                             selected_suburb = _build_map(matched_filtered_listings, suburb_summary, selected_suburb)
                 browser_scope_mode = _browser_scope_mode()
                 focus_listings, focused_match_count = _resolve_focused_suburb_browser_rows(
-                    display_listings,
-                    all_display_listings,
+                    browser_display_listings,
+                    browser_all_display_listings,
                     selected_suburb=selected_suburb,
                     browser_scope_mode=browser_scope_mode,
                 )

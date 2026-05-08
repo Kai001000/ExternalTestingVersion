@@ -27,12 +27,12 @@ Use this when the session goal is presentation-only:
 - [ ] Map interaction semantics remained unchanged
 - [ ] Shortlist identity/state semantics remained unchanged
 - [ ] Report calculation inputs and outputs remained unchanged
-- [ ] Public/external restriction gates remained unchanged
+- [ ] Public/internal mode gates remained aligned with the intended release behavior
 - [ ] Validation included render checks plus at least one behavior smoke test for each touched workflow
 
-## External Validation Matrix
-Run these whenever external behavior changes:
-- [ ] External homepage renders and appears first in navigation
+## Public Streamlit Validation Matrix
+Run these whenever public Streamlit behavior changes:
+- [ ] Product introduction homepage renders and appears first in navigation
 - [ ] Buy Chinese validated
 - [ ] Buy English validated
 - [ ] Rent Chinese validated
@@ -43,7 +43,7 @@ For each validated path:
 - [ ] Summary values match the active filtered dataset
 - [ ] Listing rows match the active filtered dataset
 - [ ] Displayed metrics match the active filtered dataset
-- [ ] Public-only restrictions remain stricter than internal baseline behavior
+- [ ] Functional behavior matches the internal baseline rather than a downgraded public path
 
 ## Market View Checklist
 - [ ] Main chart renders without exception
@@ -123,16 +123,33 @@ For each validated path:
 - [ ] Suburb/context metrics in the report match the intended canonical source dataset
 - [ ] Comparable listings in the report come from the intended canonical universe
 - [ ] No stale dataframe or hidden refilter mismatch exists between browser, shortlist, metrics, and report values
-- [ ] External export/report restrictions remain enforced where the product requires them
-- [ ] External report controls remain visible where required even when download is blocked
+- [ ] Public Streamlit report/export behavior matches the internal/full functional path
+- [ ] Sale report page order matches the current canonical narrative structure
+- [ ] Hero Summary appears first and is consistent with the downstream section evidence
+- [ ] Each major section includes explanatory narrative rather than a metric-only dump
+- [ ] Transaction-market geography scope is stated explicitly
+- [ ] Postcode fallback is stated explicitly when suburb transaction coverage is insufficient
+- [ ] Price-band geography scope matches the chosen transaction-market geography scope
+- [ ] Active-sale comparison scope is stated explicitly, including any widening from tighter comparable criteria
+- [ ] Rent scope is stated explicitly, including any widening/fallback
+- [ ] Budget sensitivity uses the canonical sale filtered universe and documented budget-step rule
+- [ ] No raw local dataset path, parquet path, or debug-style source path appears in the visible PDF
 
 ## Mode Rebase Checklist
 - [ ] Internal mode follows the refined baseline product path rather than the retired legacy-internal path
 - [ ] Retired internal-only pages or branches no longer act as default navigation
-- [ ] External mode differs only through explicit public restrictions, not through a second hidden baseline
-- [ ] Buy external property-type labels do not expose numeric counts
-- [ ] Rent external property-type labels do not expose numeric counts
-- [ ] No raw debug/data/export exposure was introduced in external/public visible UI
+- [ ] Public Streamlit keeps the product intro homepage while functional pages use full internal behavior
+- [ ] Public/external downgrade gates do not hide counts, links, shortlist, maps, tables, or reports on functional pages
+- [ ] No separate hidden public baseline overrides the internal functional path
+
+## Public Release Checklist
+- [ ] App starts with the product introduction homepage first
+- [ ] Market View renders with full internal data behavior
+- [ ] Buy Budget renders with full internal data and interaction behavior
+- [ ] Rent Budget renders with full internal data and interaction behavior
+- [ ] Navigation exposes only the intended public homepage plus current functional pages
+- [ ] Download, export, shortlist, map, table, and listing-link controls are not disabled only because of public deployment
+- [ ] Public deploy consumes the same processed/current artifacts included for internal functional behavior
 
 ## Data Pipeline Checklist
 - [ ] Required update/rebuild script completed without crash
@@ -144,6 +161,14 @@ For each validated path:
 - [ ] Market Region mapping postcodes expected for the change are populated and not null in the compatibility dim
 - [ ] Legacy `region16` outputs were refreshed if the Market Region layer changed
 - [ ] Deployment/data-sync assumptions were rechecked if the rebuild is intended for release
+
+## Public Full-Data Validation
+- [ ] Public Streamlit Market View renders without crash
+- [ ] Public Streamlit reads `Processed/mart_daily_rolling/` for daily trend data
+- [ ] Price-band logic can use the full internal fact-sales path
+- [ ] Latest visible date matches the deployed processed data
+- [ ] KPI outputs remain consistent with the internal logic path
+- [ ] No fallback to cache paths exists in runtime behavior
 
 ## Audit Checklist
 - [ ] Each visible component under audit was mapped to its active source function

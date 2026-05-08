@@ -48,6 +48,14 @@ utils/
 - `utils/ui_style.py` owns shared internal visual tokens and reusable presentation helpers such as hero blocks, card shells, filter-panel wrappers, and semantic chip styles
 - shared UI helpers are presentation-only and must not become a second source of truth for metrics, filter state, map state, shortlist state, or report logic
 
+## Public Streamlit Data Layer
+- public Streamlit uses the same full functional data paths as internal mode
+- Market View reads the pipeline-backed `Processed/mart_daily_rolling/` and `Processed/fact_sales/` datasets
+- Buy Budget and Rent Budget read the current listing datasets under `data/current/`
+- `Processed/dim/` remains the canonical dimension layer for geography attribution
+- `data/public_market_view/` is retained only as a legacy snapshot layer and is not the active full-public runtime path
+- `data/cache/` remains disposable and must not act as a runtime dependency
+
 ## Page and Module Responsibilities
 ### Market View
 Responsibilities:
@@ -77,6 +85,12 @@ Responsibilities:
 - sale PDF/report workflows where enabled
 - internal presentation may reuse shared UI helpers, but the page must continue to own its canonical sale filtered dataset and report context path
 
+Sale report workflow notes:
+- the current local iteration path may generate a sale PDF outside the Streamlit UI for faster report development
+- this local path must still reuse canonical Buy Budget and Market View logic/data rather than introduce an independent report-only metric framework
+- reusable report-generation logic lives under `utils/`
+- local sample/iteration entrypoints live under `scripts/`
+
 ### Rent Budget
 Responsibilities:
 - rent listing filtering
@@ -95,18 +109,18 @@ State-model rules:
 - translated labels must not become persisted canonical keys
 - hidden legacy state must not override active visible controls
 - pagination/detail-panel changes must not incorrectly mutate the map universe
-- external persisted state must use stable canonical keys rather than translated display labels
+- persisted state must use stable canonical keys rather than translated display labels
 
 ## External / Internal Boundaries
-### External Mode
-- public/test layer built on top of the shared refined baseline
-- keeps stricter public-only restrictions without diverging into a separate product architecture
-- adds the external homepage and public limitation messaging where required
+### Public Streamlit Mode
+- keeps the product introduction homepage as page 0
+- functional pages run the full internal product behavior
+- public/external downgrade gates should be bypassed for functional pages
+- no separate public-restricted product branch should be used for Market View, Buy Budget, or Rent Budget
 
 ### Internal Mode
-- now runs the same refined baseline product path that previously lived under external mode
-- must not fall back to the legacy richer internal workflow by default
-- may retain compatibility-only differences where explicitly documented, such as working report download
+- runs the same refined full product path as public Streamlit functional pages
+- remains the local review and development baseline
 
 ## Data Flow by Page
 ### Market View
@@ -118,6 +132,7 @@ State-model rules:
 - reads the sale listing dataset
 - constructs a page-specific canonical filtered sale dataset
 - drives map, listing browser, shortlist, and sale-report outputs from that page dataset
+- local sale-report generation for iteration must resolve the target listing from the current sale listing data, then derive report sections from the same canonical filtered universe and reused metric/helper paths
 
 ### Rent Budget
 - reads the rent listing dataset
@@ -125,12 +140,12 @@ State-model rules:
 - drives map, listing browser, and rent-side outputs from that page dataset
 
 ## Architecture Notes Promoted From Handoffs
-- the refined former external workflow is now the shared baseline for both modes
-- public restrictions should be layered with explicit mode gates rather than by reviving legacy internal branches
+- the public Streamlit functional workflow is aligned with the full internal version
+- public restrictions are not active on functional pages; only the product introduction homepage remains public-specific
 - Buy and Rent must continue to use separate listing datasets and separate filtered-universe pipelines
 - focused suburb must not be treated as the page-global filter source of truth
 - map highlight and browser sync must be maintained together when interaction logic changes
-- external layout/state work should preserve a single source of truth for filtered scope, focused suburb, and selected listing
-- external mode should continue to use the single-map path for listing selection rather than duplicate map render paths
-- external visible controls must remain the effective source of truth and must not be shadowed by hidden legacy state
-- the shared theme injector currently applies globally; future cleanup may narrow internal-only styling more explicitly, but public restrictions must remain mode-gated rather than style-gated
+- layout/state work should preserve a single source of truth for filtered scope, focused suburb, and selected listing
+- listing selection should continue to use the single-map path rather than duplicate map render paths
+- visible controls must remain the effective source of truth and must not be shadowed by hidden legacy state
+- the shared theme injector currently applies globally; future cleanup may narrow internal-only styling more explicitly without reintroducing functional-page public downgrades

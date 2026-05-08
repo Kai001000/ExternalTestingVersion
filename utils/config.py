@@ -19,8 +19,11 @@ PRICE_MIN_EXCLUSIVE = 0
 APP_MODE = os.getenv("APP_MODE", "internal").strip().lower() or "internal"
 if APP_MODE not in {"internal", "external"}:
     APP_MODE = "internal"
-IS_INTERNAL_MODE = APP_MODE == "internal"
-IS_PUBLIC_MODE = APP_MODE == "external"
+
+# Public Streamlit keeps the intro homepage, while functional pages run the
+# full internal product behavior regardless of deployment APP_MODE.
+IS_INTERNAL_MODE = True
+IS_PUBLIC_MODE = False
 
 # rolling windows (in weeks)
 ROLL_WINDOWS = {

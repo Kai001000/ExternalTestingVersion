@@ -13,7 +13,98 @@
 
 ## Reverse-Chronological Session Record
 
-### 2026-04-26 - Internal UI Refactor Baseline + Shared Visual System
+### 2026-05-08 — Public Streamlit Full Internal Alignment
+
+Context: Streamlit Cloud release alignment | public homepage retained | full internal functional behavior
+
+What changed:
+- Public Streamlit now keeps the product intro landing page as the first page.
+- Functional pages now follow full internal behavior:
+  - Market View
+  - Buy Budget
+  - Rent Budget
+- External/public downgrades were removed or bypassed for functional pages by making public deployment run the internal/full mode gates.
+- Public deploy data expectation is now: the public Streamlit app follows the latest internal `Processed/` and `data/current/` artifacts included in the deployment.
+- Performance checks and caching audit completed for the touched release path:
+  - parquet/listing/dimension loads are cached through existing `st.cache_data` paths
+  - functional pages load their own datasets on page entry
+  - Market View keeps daily rolling, fact-sales, dimension, and price-band computations behind cached helpers
+  - Buy/Rent listing reads remain cached and page-local
+
+Validation:
+- Required compile and local Streamlit smoke checks were run for this release pass.
+- Public-specific homepage remains in navigation while functional pages use internal/full behavior.
+
+### 2026-05-02 — Public Release Preparation + Session Close Handoff
+
+Context: public/external release preparation | Streamlit sharing posture | product-safe public surface
+
+What was decided:
+- Public link sharing is acceptable for early testing and lightweight distribution, provided the app runs as a product-safe downgraded public surface.
+- Market View can act as the first public-facing analytical surface because it is the most deployment-safe and least sensitive workflow.
+- Buy Budget and Rent Budget may remain visible in navigation during public testing, but pages or features that are not ready for public use must be guarded so navigation cannot expose full internal behavior.
+- External/public mode must not expose raw internal data, unrestricted exports, sensitive outbound listing links, or internal tooling.
+- Internal mode remains the usable local baseline for review, debugging, and deeper product iteration.
+
+Why it matters:
+- Streamlit public sharing provides a low-friction way to test distribution while heavier commercialization is still uncertain.
+- Initial Xiaohongshu outreach produced low conversion, so a simple public link can be used to collect lightweight feedback before investing in more complex acquisition or sales infrastructure.
+- Public mode must protect trust, data footprint, and product boundaries even when the link is easy to access.
+
+Current recommended public release posture:
+- Treat external mode as a controlled public demo/test surface, not as the full internal product.
+- Lead with Market View or another explicitly approved public-safe landing path.
+- Keep unfinished Buy/Rent capabilities guarded, disabled, or clearly unavailable until validated for public exposure.
+- Prefer simple public link access for early testing; do not add authentication or heavy commercialization layers until product demand is clearer.
+
+Internal vs public behavior expectations:
+- Internal mode may continue using full `Processed/` data, local report generation, debug/research utilities, and richer review workflows.
+- Public mode must consume only approved public-safe outputs and must remain stricter than internal mode.
+- Public mode should degrade capability intentionally rather than silently exposing internal paths.
+- Public-visible messaging should be concise, product-facing, and clear about test/reference-only status.
+
+Risks / safeguards:
+- Navigation must not bypass public guards on pages that are visible but not release-ready.
+- Public mode must hide or disable raw tables, unrestricted downloads, full exports, sensitive listing links, and internal/debug affordances.
+- External Market View must continue using the public snapshot layer and must not fall back to full fact data or cache paths.
+- Any public release check must validate mode, navigation, Page 1 rendering, guard behavior, and absence of raw/export/link exposure.
+
+Next-session instructions:
+- Start by checking whether the intended public entry path is the external homepage or Market View and verify navigation order accordingly.
+- Validate public mode before sharing any Streamlit link.
+- If Buy/Rent remain visible, confirm their guarded states cannot expose full listing/export/link functionality.
+- Do not broaden public functionality until the corresponding page passes the public-release checklist.
+- Keep commercialization experiments lightweight until stronger conversion evidence exists.
+
+### 2026-04-28 — Public Data Snapshot Architecture + External Stability Fix
+
+Context: Market View + Deployment + Data Strategy
+
+What was done:
+- Introduced `data/public_market_view/` as the canonical external dataset for Market View deployment.
+- External Market View now reads only from lightweight public snapshots.
+- Internal mode continues using full `Processed/` data.
+- Removed dependency on `data/cache/` as a runtime source.
+- Fixed the `st.session_state` widget ordering bug for `mv_chart_region_area`.
+
+Why:
+- Streamlit Cloud cannot safely rely on the full `Processed/` parquet footprint.
+- External mode needs a deterministic, deploy-safe dataset rather than implicit local/full-pipeline assumptions.
+- Cache-based runtime behavior is undefined for deployment and must not be treated as canonical data.
+- External runtime stability depends on avoiding heavy fact loads and widget/session ordering failures.
+
+Validation:
+- External Market View renders without crash.
+- External Market View shows the latest available public snapshot data (`2026-04-22`).
+- External mode does not load full `fact_sales`.
+- Internal mode continues using the latest full local data.
+- Market View KPI outputs remained unchanged for the audited cases after the session-state fix.
+
+Known constraints:
+- The public snapshot is intentionally reduced to a 36-month window.
+- External price-band support is intentionally limited to predefined public scopes.
+
+### 2026-04-26 — Internal UI Refactor Baseline + Shared Visual System
 
 Context: internal UI presentation refresh | shared styling layer | Market View + Buy + Rent alignment
 
@@ -25,6 +116,7 @@ Changes:
   - Buy Budget
   - Rent Budget
 - Kept the session within a UI-only boundary: presentation changed, but metrics, filtering, state, map behavior, shortlist behavior, report calculations, and public restrictions were preserved.
+- Closed a pre-existing Buy sale-report regression by aligning the report price-band helper with the current Market View `load_price_band_data(level, regions_selected, dwelling)` contract and the canonical transaction-geography scope rule.
 
 Validation summary:
 - `py_compile` completed for the touched pages and shared helpers.
@@ -64,7 +156,77 @@ Known technical debt:
   - Streamlit `use_container_width` deprecation warnings
   - pandas `fillna` future warning in Market View
 
+### 2026-04-26 — Sale Report Positioning Workflow + Narrative Canonicalization
+
+Context: Buy Budget sale report workflow | local PDF iteration | narrative report structure
+
+Changes:
+- Added a local single-listing sale-report workflow that writes report artifacts into the repo `reports/` folder for fast iteration outside the Streamlit UI.
+- Promoted a canonical reuse order for report calculations: existing UI-visible logic first, existing hidden helpers second, narrowly scoped canonical-aligned calculations only when necessary.
+- Promoted explicit geography and fallback disclosure rules for transaction, price-band, current-sale, and rent sections in the sale report.
+- Promoted a narrative-first report structure centered on listing positioning, including a Hero Summary and revised page order.
+
+Rules promoted:
+- Sale reports must answer the core question `What is the positioning of this listing?`
+- Transaction-market sections use suburb first and postcode fallback when suburb transaction coverage is insufficient for stable series or valid charting.
+- Price-band performance remains geography-dependent and must use the same chosen transaction geography scope as the transaction section.
+- Current active-sale comparison sections use suburb as the primary scope and must disclose any widening from tighter comparable criteria.
+- Rent sections prefer geography + property type, include bedroom matching when reliable, and must disclose widened/fallback scope.
+- The visible PDF must not expose raw local dataset paths, parquet paths, or debug-style source paths.
+- The sale report must use the canonical narrative page order with Hero Summary first and explanatory narrative in every major section.
+
+Notes:
+- The initial implementation was exercised through a single sample listing for local iteration, but the promoted rules apply to reusable sale-report logic rather than to that one address.
+
 The content below is preserved from the prior `MASTER_SPEC.md` handoff/history section so the dated record and session rationale are not lost.
+### 2026-04-21 — External Homepage Productization + Rent/Sale UI Alignment + Cloud Deployment Stabilization
+
+Context: External landing experience | Rent/Sale product parity | Streamlit Cloud runtime stabilization
+
+#### 1. What Changed
+- The external first page was upgraded from a test-version notice into a product-style landing page.
+- Homepage positioning is now simpler and more product-facing:
+  - no `free` framing
+  - no heavy disclaimer tone
+  - NSW presented as the clear coverage scope
+  - feedback invitation made explicit and intentional
+- The external homepage now follows a clearer structure:
+  - hero statement
+  - 3 key fact cards
+  - 4 secondary guidance cards
+  - softer closing note
+- Rent was brought into alignment with Sale as the canonical reference surface rather than continuing as a separately shaped page.
+- Rent now follows the same interaction model as Sale:
+  - paginated suburb ranking
+  - left-side map / right-side listing browser shell
+  - aligned listing browser and detail-panel structure
+
+#### 2. Rendering And UX Outcome
+- Homepage HTML rendering was stabilized so the page no longer exposes raw HTML fragments in the UI.
+- The homepage card system was unified into one consistent layout model rather than mixing broken HTML wrappers and looser native blocks.
+- Spacing and padding were tightened so the landing page reads as a coherent product surface rather than a notice page with empty boxes.
+- The end result is that external mode now opens on a cleaner product landing page, while Buy/Rent continue to behave as the public-restricted layer on top of the shared baseline product.
+
+#### 3. Deployment / Runtime Lesson
+- Streamlit Cloud exposed missing runtime dependencies that were already present locally, which caused Sale-page import failures even though local development appeared healthy.
+- The missing runtime packages identified in this session were:
+  - `matplotlib`
+  - `reportlab`
+- Both were added to `requirements.txt`.
+- Operational takeaway: local success is not enough for Streamlit Cloud deployment; any package imported at module load time must be explicitly represented in the cloud runtime dependency file.
+
+#### 4. Final Product State
+- Internal mode remains the baseline product workflow.
+- External mode now presents:
+  - a product-style landing homepage
+  - the same baseline product surface underneath
+  - the intended public restrictions on top
+- Rent and Sale now feel materially closer to the same product system instead of two differently designed workflows.
+
+#### 5. Doc Impact
+- No canonical product-spec update was required.
+- This session changed presentation quality, UI parity, and deployment stability, but did not redefine the underlying product architecture or mode model.
+
 ### 2026-04-21 — Rent UX Alignment To Sale + Public Report Placeholder Buttons
 
 Context: Rent/Sale UX parity | Mojibake cleanup | Public placeholder reports

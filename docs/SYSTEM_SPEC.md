@@ -8,7 +8,7 @@ NSW Property Analytics is a data-driven property decision platform for NSW sale 
 - property analytics SaaS workflows
 
 Current stage:
-- Baseline product consolidation + public test stage
+- Public Streamlit full-internal alignment
 
 ## Version Strategy
 ### Internal Version
@@ -22,26 +22,37 @@ Allowed capabilities:
 - full working shortlist report download where implemented
 - category labels may include counts where the baseline workflow still exposes them
 
-### External Version
+### Public Streamlit Version
 Purpose:
-- public test
-- product trial
-- outward-facing validation
+- public product entry through Streamlit Cloud
+- outward-facing access to the same functional product behavior as internal mode
 
-Restricted capabilities:
-- stricter public restrictions on top of the internal baseline
-- report download remains visible but unavailable where public policy requires it
-- property-category labels must not expose numeric counts on Buy / Rent pages
-- public/test messaging must be shown through a dedicated homepage entry
+Allowed capabilities:
+- keep the existing product introduction homepage as page 0
+- Market View, Buy Budget, and Rent Budget follow full internal behavior
+- shortlist, map, listing, link, report, table, and filter behavior should not be downgraded only because the app is running publicly
 
-External-specific rules:
-- the external homepage is the first navigation page
-- output wording must clearly state test/beta/reference-only status without turning into a legal wall
-- external remains stricter than internal and must not regain retired legacy-internal depth
+Public Streamlit rules:
+- the product introduction homepage is the first navigation page
+- functional pages are the current internal/full versions
+- external/public downgrade gates must not hide or disable functionality on functional pages
+- Streamlit Cloud should reflect the latest internal processed/current datasets included in deployment
+
+## Public vs Internal Data Architecture
+### Public Streamlit And Internal Mode
+Public Streamlit and internal mode MUST:
+- use the full `Processed/` datasets
+- reflect the latest local data updates
+- use the same Market View daily rolling marts and fact-sales paths
+
+### Cache Rule
+`data/cache/` is non-canonical:
+- it must never be used as a runtime dependency
+- it may exist only as a disposable acceleration layer for local/internal workflows
 
 ## Page Structure
 Current pages:
-1. External homepage (external mode only)
+1. Product introduction homepage
 2. Market View
 3. Buy Budget
 4. Rent Budget
@@ -116,10 +127,44 @@ Shortlist system requirements:
 - stable listing identity
 
 Export/report constraints:
-- internal mode remains the baseline working path for report download where the page already supports it
-- external mode must not expose unrestricted download behavior that conflicts with public-test restrictions
+- internal/full mode remains the baseline working path for report download where the page already supports it
+- public Streamlit functional pages use the same report/export behavior as internal/full mode
 - report/export outputs must remain consistent with the active canonical dataset for the page producing them
 - no hidden mismatch is allowed between listing browser, shortlist, metrics, map state, and report content
+
+### Sale Report Product Rules
+Canonical sale-report principle:
+- the sale report must be structured around one core user question: `What is the positioning of this listing?`
+- sections must support a single decision narrative rather than read like independent stitched-together exports
+
+Required page order for the current sale report:
+- Page 1:
+  - Hero Summary
+  - Key Metrics
+  - Current Sale Market Positioning
+  - Transaction Market Snapshot
+- Page 2:
+  - Price Band Analysis
+  - Price Distribution Chart
+- Page 3:
+  - Budget Sensitivity
+  - Rent & Yield Snapshot
+  - Final Summary
+
+Required narrative/visual behavior:
+- Hero Summary must appear at the top of page 1
+- Hero Summary must include address, property type, price, and a short narrative combining asking-market positioning, transaction-market condition, and supply/comparable context
+- each section must include a short explanatory sentence rather than only raw metrics
+- metric-card style grouped blocks are preferred over raw table-first presentation
+- raw local dataset paths, parquet paths, or debug-style source paths must not appear in the visible PDF
+
+Final summary behavior:
+- the closing summary must include structured insight on:
+  - pricing vs market
+  - transaction trend
+  - supply / comparables
+  - investment signal
+- the report must remain factual and must not provide buy/sell recommendations
 
 ## Budget/Search Form Rules
 - use `st.form`
@@ -205,17 +250,17 @@ Therefore:
 - Buy and Rent filters must be applied independently
 - each page must maintain its own canonical filtered dataset
 - each page must maintain its own applied-filter pipeline
-- no shared `filtered_external_df` should be assumed
+- no shared cross-page filtered dataframe should be assumed
 - sale-side and rent-side downstream outputs must stay internally consistent with their own page dataset
 
-## External-Only Development Rules
-During the current stabilization phase:
-- modifications should target external mode unless an internal compatibility adjustment is genuinely required
-- internal behavior should not be degraded or stripped of research/debug capability
-- external fixes must not silently redefine internal analytical behavior
+## Public Streamlit Development Rules
+During the current release phase:
+- functional-page modifications should preserve internal/full behavior across local and Streamlit Cloud runtime
+- public deployment must not silently introduce a downgraded Market View, Buy Budget, or Rent Budget path
+- the product introduction homepage may remain public-specific
 
 ## Chinese / English Consistency Rules
-All external page changes must apply to both:
+All public functional page changes must apply to both:
 - Chinese
 - English
 
