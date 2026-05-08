@@ -22,9 +22,16 @@ What changed:
 - Root cause of the Cloud/local mismatch was that the local latest parquet files were marked skip-worktree, so `git status` hid their difference from the deploy branch. The deploy commit still contained older 2026-04-16 Market View files.
 - Market View daily rolling and fact-sales cache keys now include source file size/modified time so redeploys or data-file refreshes invalidate stale cached reads without removing page-level caching.
 - Product homepage was redesigned around the data-source advantage: NSW Valuation / government property records, normal transactions, and off-market coverage.
+- Fix commit: `de2cf0a210ac5f818414d5efd95a53cd63d21b83`.
 
 Validation target:
 - Default Market View should show data updated to 2026-04-30 with stable median $980,000 and stable cutoff 2026-03-26 for the same default NSW / HOUSE selection in both internal and external deployment modes.
+
+Deploy data rule added:
+- Before every Streamlit deploy data update, run `git ls-files -v Processed data/current | findstr "^[S]"`.
+- If a target deploy data file is marked skip-worktree, clear it with `git update-index --no-skip-worktree <file>`.
+- Do not rely only on `git status`; confirm deploy/index parquet content with `git show HEAD:<file>` or an equivalent index/checkout read.
+- Market View deploy acceptance must record latest market date, stable anchor date, and stable median.
 
 ### 2026-05-08 — Public Deployment Safety Gates For Source Labels And Reports
 

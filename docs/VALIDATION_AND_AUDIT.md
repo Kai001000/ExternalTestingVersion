@@ -171,8 +171,18 @@ For each validated path:
 - [ ] Price-band logic can use the full internal fact-sales path
 - [ ] Latest visible date matches the deployed processed data
 - [ ] Internal and external deployment modes show the same default Market View KPI/date values for the same filters
+- [ ] Market View deploy acceptance explicitly records latest market date, stable anchor date, and stable median
 - [ ] KPI outputs remain consistent with the internal logic path
 - [ ] No fallback to cache paths exists in runtime behavior
+
+## Deploy Data Git Validation
+Run these checks before every Streamlit deploy data update:
+- [ ] Check for hidden local data changes with `git ls-files -v Processed data/current | findstr "^[S]"`
+- [ ] If any target deploy data file is marked skip-worktree, clear it first with `git update-index --no-skip-worktree <file>`
+- [ ] Do not rely only on `git status` for deploy data; skip-worktree can hide local parquet changes
+- [ ] Compare the deploy/index content against local data with `git show HEAD:<file>` or an equivalent index/checkout read
+- [ ] For parquet deploy files, verify row count and max date from both local file and `HEAD:<file>` before committing
+- [ ] For Market View deploy acceptance, verify latest market date, stable anchor date, and stable median after the commit candidate is staged
 
 ## Audit Checklist
 - [ ] Each visible component under audit was mapped to its active source function
