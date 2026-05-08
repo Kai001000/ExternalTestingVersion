@@ -9,7 +9,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils.config import IS_PUBLIC_MODE
+from utils.config import IS_EXTERNAL_DEPLOYMENT, IS_PUBLIC_MODE
 from utils.data import (
     apply_external_rent_listing_display_filter,
     build_suburb_centroid_lookup,
@@ -1678,9 +1678,8 @@ def _render_shortlist_panel(shortlist_df):
                     on_click=_toggle_shortlist,
                     args=(str(row["listing_id"]), row),
                 )
-                if IS_PUBLIC_MODE:
-                    if st.button(tr("下载报告", "Download Report"), key=f"rent_shortlist_report_placeholder_{row['listing_id']}", use_container_width=True):
-                        st.info(tr("公开测试版报告功能仍在开发中，暂未开放下载。", "Report download for the public test build is still under development."))
+                if IS_EXTERNAL_DEPLOYMENT or IS_PUBLIC_MODE:
+                    st.caption(tr("报告下载尚未对公开部署开放。", "Report download is not available in the public deployment."))
                 else:
                     if st.button(tr("下载报告", "Download Report"), key=f"rent_shortlist_report_internal_{row['listing_id']}", use_container_width=True):
                         st.info(tr("租房 shortlist 报告仍在开发中。", "Rent shortlist reports are still under development."))
@@ -1946,8 +1945,9 @@ def main():
         source_status = get_domain_rent_source_status()
         df = load_domain_rent_listings()
     if df.empty:
-        st.error(tr("未找到可用的 Domain 租盘 parquet 文件。", "No Domain rent parquet file was found."))
-        st.code(source_status["path"])
+        st.error(tr("未找到可用的市场挂牌数据。", "No market listing data file was found."))
+        if not IS_EXTERNAL_DEPLOYMENT:
+            st.code(source_status["path"])
         return
     df = apply_external_rent_listing_display_filter(df)
     suburb_centroid_lookup = build_suburb_centroid_lookup(df)

@@ -117,6 +117,7 @@ State-model rules:
 - functional pages run the full internal product behavior
 - public/external downgrade gates should be bypassed for functional pages
 - no separate public-restricted product branch should be used for Market View, Buy Budget, or Rent Budget
+- safety gates still read the raw deployment mode to hide unfinished report downloads and upstream listing platform names in public deployment
 
 ### Internal Mode
 - runs the same refined full product path as public Streamlit functional pages
@@ -142,6 +143,7 @@ State-model rules:
 ## Architecture Notes Promoted From Handoffs
 - the public Streamlit functional workflow is aligned with the full internal version
 - public restrictions are not active on functional pages; only the product introduction homepage remains public-specific
+- public deployment safety gates remain active for source-label suppression and report-download suppression
 - Buy and Rent must continue to use separate listing datasets and separate filtered-universe pipelines
 - focused suburb must not be treated as the page-global filter source of truth
 - map highlight and browser sync must be maintained together when interaction logic changes

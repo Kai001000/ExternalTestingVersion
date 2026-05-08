@@ -25,7 +25,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from utils.config import IS_PUBLIC_MODE
+from utils.config import IS_EXTERNAL_DEPLOYMENT, IS_PUBLIC_MODE
 from utils.data import (
     add_underlying_trend,
     apply_external_rent_listing_display_filter,
@@ -89,10 +89,10 @@ BUY_SORT_SPECS: dict[str, tuple[str, bool]] = {
 }
 
 CORE_LISTING_BADGE = "Core listing"
-EXTENDED_LISTING_BADGE = "Extended validated listing"
-EXTENDED_LISTING_CAPTION = "Extended listings are validated from an external source and may not appear on Domain."
+EXTENDED_LISTING_BADGE = "Additional market record"
+EXTENDED_LISTING_CAPTION = "Additional records are drawn from publicly available market records."
 EXTENDED_LAYER_ROOT = Path(__file__).resolve().parents[2] / "BeautifulDataSource" / "data" / "extended" / "onthehouse_validated"
-EXTENDED_SOURCE_FILTER_OPTIONS = ["Show all", "Show core only", "Show extended only"]
+EXTENDED_SOURCE_FILTER_OPTIONS = ["Show all", "Show listing data only", "Show additional records only"]
 
 st.markdown(
     """
@@ -562,9 +562,9 @@ def _filter_browser_listing_source(display: pd.DataFrame, mode: str) -> pd.DataF
     if display.empty or mode == "Show all":
         return display.copy()
     is_extended = display.get("listing_layer", pd.Series(index=display.index, dtype=object)).astype(str).str.lower() == "extended"
-    if mode == "Show extended only":
+    if mode == "Show additional records only":
         return display.loc[is_extended].copy()
-    if mode == "Show core only":
+    if mode == "Show listing data only":
         return display.loc[~is_extended].copy()
     return display.copy()
 
@@ -1846,7 +1846,6 @@ def _render_sale_report_pdf_bytes(row: pd.Series, market_listings: pd.DataFrame)
                     f"{tr('卫生间', 'Bathrooms')}: {_count_label(row.get('bathrooms'))}",
                     f"{tr('车位', 'Parking')}: {_count_label(row.get('parking'))}",
                     f"{tr('挂牌价格', 'Listing price')}: {_report_text(row.get('price_display'))} ({_report_money(context['numeric_price'])})",
-                    f"{tr('来源', 'Source')}: {_report_text(row.get('source') or row.get('source_name') or row.get('provider'))}",
                 ],
             ),
             (
@@ -4693,7 +4692,7 @@ def _render_external_listing_panel(listings: pd.DataFrame, selected_suburb: str,
         <div class="budget-panel-summary">
           <div class="budget-panel-eyebrow">{scope_eyebrow}</div>
           <div class="budget-panel-title">{scope_label}<span class="budget-panel-badge">{len(listings):,}</span></div>
-          <div class="budget-panel-subtitle">{tr('右侧列表与详情均严格来自当前 External 受保护筛选范围。', 'The list and detail panel strictly use the current protected external scope.')}</div>
+          <div class="budget-panel-subtitle">{tr('右侧列表与详情均基于当前筛选范围。', 'The list and detail panel use the current filtered scope.')}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -5058,9 +5057,6 @@ def _render_shortlist_report_item(row: pd.Series, market_listings: pd.DataFrame)
             st.write(f"{tr('Price', 'Price')}: {_report_text(row.get('price_display'))}")
             st.write(f"{tr('Type', 'Type')}: {_report_property_type(row)}")
             st.write(f"{tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}")
-            source_value = _report_text(row.get("source") or row.get("source_name") or row.get("provider"))
-            if source_value != "N/A":
-                st.caption(f"{tr('来源', 'Source')}: {source_value}")
         with action_col:
             st.button(
                 tr("移出 shortlist", "Remove"),
@@ -5070,18 +5066,18 @@ def _render_shortlist_report_item(row: pd.Series, market_listings: pd.DataFrame)
                 args=(str(row["listing_id"]), _snapshot_listing(row)),
             )
             try:
-                pdf_bytes = _render_sale_report_pdf_bytes_v2(row, market_listings)
-                st.download_button(
-                    tr("下载报告", "Download Report"),
-                    data=pdf_bytes,
-                    file_name=_safe_report_filename(row),
-                    mime="application/pdf",
-                    key=f"shortlist_report_{row['listing_id']}",
-                    use_container_width=True,
-                    disabled=IS_PUBLIC_MODE,
-                )
-                if IS_PUBLIC_MODE:
-                    st.caption(tr("Public test version 暂不提供报告下载。", "Report download is not available in the public test version."))
+                if IS_EXTERNAL_DEPLOYMENT:
+                    st.caption(tr("报告下载尚未对公开部署开放。", "Report download is not available in the public deployment."))
+                else:
+                    pdf_bytes = _render_sale_report_pdf_bytes_v2(row, market_listings)
+                    st.download_button(
+                        tr("下载报告", "Download Report"),
+                        data=pdf_bytes,
+                        file_name=_safe_report_filename(row),
+                        mime="application/pdf",
+                        key=f"shortlist_report_{row['listing_id']}",
+                        use_container_width=True,
+                    )
             except Exception:
                 st.caption(tr("该房源报告暂时无法生成。", "This report is currently unavailable for this listing."))
 
@@ -5103,9 +5099,6 @@ def _render_shortlist_report_item_public_aligned(row: pd.Series, market_listings
             st.write(f"{tr('Price', 'Price')}: {_report_text(row.get('price_display'))}")
             st.write(f"{tr('Type', 'Type')}: {_report_property_type(row)}")
             st.write(f"{tr('Beds/Baths/Parking', 'Beds/Baths/Parking')}: {_feature_triplet(row)}")
-            source_value = _report_text(row.get("source") or row.get("source_name") or row.get("provider"))
-            if source_value != "N/A":
-                st.caption(f"{tr('来源', 'Source')}: {source_value}")
         with action_col:
             st.button(
                 tr("移出 shortlist", "Remove"),
@@ -5114,13 +5107,8 @@ def _render_shortlist_report_item_public_aligned(row: pd.Series, market_listings
                 on_click=_toggle_shortlist_callback,
                 args=(str(row["listing_id"]), _snapshot_listing(row)),
             )
-            if IS_PUBLIC_MODE:
-                if st.button(
-                    tr("下载报告", "Download Report"),
-                    key=f"shortlist_report_placeholder_{row['listing_id']}",
-                    use_container_width=True,
-                ):
-                    st.info(tr("公开测试版报告功能仍在开发中，暂未开放下载。", "Report download for the public test build is still under development."))
+            if IS_EXTERNAL_DEPLOYMENT or IS_PUBLIC_MODE:
+                st.caption(tr("报告下载尚未对公开部署开放。", "Report download is not available in the public deployment."))
             else:
                 try:
                     pdf_bytes = _render_sale_report_pdf_bytes_v2(row, market_listings)
@@ -5467,8 +5455,9 @@ def main() -> None:
         source_status = get_domain_listing_source_status()
         df = load_domain_sale_listings()
     if df.empty:
-        st.error(tr("未找到 Domain 挂牌 parquet 文件。", "No Domain listing parquet file was found."))
-        st.code(source_status["path"])
+        st.error(tr("未找到可用的市场挂牌数据。", "No market listing data file was found."))
+        if not IS_EXTERNAL_DEPLOYMENT:
+            st.code(source_status["path"])
         return
     df = apply_external_sale_listing_display_filter(df)
     suburb_centroid_lookup = build_suburb_centroid_lookup(df)
@@ -5860,14 +5849,14 @@ def main() -> None:
     if not IS_PUBLIC_MODE:
         with st.container(border=True):
             include_extended_listings = st.toggle(
-                "Include validated extended listings (OnTheHouse)",
+                "Include additional market listing records",
                 value=False,
                 key="budget_include_validated_extended_listings",
             )
             if include_extended_listings:
                 st.caption(EXTENDED_LISTING_CAPTION)
                 extended_source_filter = st.selectbox(
-                    "Listing source view",
+                    "Listing data view",
                     EXTENDED_SOURCE_FILTER_OPTIONS,
                     index=0,
                     key="budget_extended_listing_source_filter",

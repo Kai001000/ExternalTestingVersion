@@ -13,6 +13,21 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-05-08 — Public Deployment Safety Gates For Source Labels And Reports
+
+Context: public Streamlit safety patch | full internal behavior retained | report and source-label restrictions
+
+What changed:
+- Public deployment keeps full internal analytical behavior and the existing product intro landing page.
+- Public deployment safety gates remain active separately from functional mode.
+- Specific upstream listing source names must not appear in user-facing UI, captions, warnings, table/report text, or report outputs.
+- User-facing wording should use neutral labels such as `market listing data`, `listing data`, `market data`, and `publicly available market records`.
+- Report download remains internal-only until the report feature is production-ready.
+
+Validation target:
+- `APP_MODE=internal` may show internal report-download controls where implemented.
+- `APP_MODE=external` keeps the same functional pages but suppresses report download entry points and source-platform labels.
+
 ### 2026-05-08 — Public Streamlit Full Internal Alignment
 
 Context: Streamlit Cloud release alignment | public homepage retained | full internal functional behavior

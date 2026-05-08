@@ -149,6 +149,9 @@ For each validated path:
 - [ ] Rent Budget renders with full internal data and interaction behavior
 - [ ] Navigation exposes only the intended public homepage plus current functional pages
 - [ ] Download, export, shortlist, map, table, and listing-link controls are not disabled only because of public deployment
+- [ ] Report download controls are hidden or disabled in public deployment until reports are production-ready
+- [ ] User-facing UI does not expose specific upstream listing platform names
+- [ ] User-facing provenance wording uses neutral market/listing/record terminology
 - [ ] Public deploy consumes the same processed/current artifacts included for internal functional behavior
 
 ## Data Pipeline Checklist

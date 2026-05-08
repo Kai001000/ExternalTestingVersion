@@ -38,6 +38,13 @@ Public Streamlit rules:
 - external/public downgrade gates must not hide or disable functionality on functional pages
 - Streamlit Cloud should reflect the latest internal processed/current datasets included in deployment
 
+Public deployment safety gates:
+- public deployment keeps full internal analytical behavior
+- specific upstream listing platform names must not appear in user-facing UI, tooltips, captions, warnings, tables, or report text
+- user-facing listing provenance should use neutral wording such as `market listing data`, `listing data`, `market data`, or `publicly available market records`
+- report download remains internal-only until the report feature is production-ready
+- safety gates are controlled separately from functional mode so public deployment can keep full analysis while still hiding unfinished report/export entry points
+
 ## Public vs Internal Data Architecture
 ### Public Streamlit And Internal Mode
 Public Streamlit and internal mode MUST:
@@ -129,6 +136,7 @@ Shortlist system requirements:
 Export/report constraints:
 - internal/full mode remains the baseline working path for report download where the page already supports it
 - public Streamlit functional pages use the same report/export behavior as internal/full mode
+- public deployment must hide or disable report download entry points until reports are production-ready
 - report/export outputs must remain consistent with the active canonical dataset for the page producing them
 - no hidden mismatch is allowed between listing browser, shortlist, metrics, map state, and report content
 

@@ -16,7 +16,8 @@ PRICE_MAX = 100_000_000
 PRICE_MIN_EXCLUSIVE = 0
 
 # ====== app mode ======
-APP_MODE = os.getenv("APP_MODE", "internal").strip().lower() or "internal"
+RAW_APP_MODE = os.getenv("APP_MODE", "internal").strip().lower() or "internal"
+APP_MODE = RAW_APP_MODE
 if APP_MODE not in {"internal", "external"}:
     APP_MODE = "internal"
 
@@ -24,6 +25,7 @@ if APP_MODE not in {"internal", "external"}:
 # full internal product behavior regardless of deployment APP_MODE.
 IS_INTERNAL_MODE = True
 IS_PUBLIC_MODE = False
+IS_EXTERNAL_DEPLOYMENT = RAW_APP_MODE == "external"
 
 # rolling windows (in weeks)
 ROLL_WINDOWS = {

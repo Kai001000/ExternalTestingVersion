@@ -53,7 +53,7 @@ def main() -> None:
         unsafe_allow_html=True,
     )
     st.markdown(
-        f"<p>{escape(tr('旧的内部 Ranking 行为不再作为默认产品路径或当前真相来源。当前版本以 Market View、Buy Budget 和 Rent Budget 为主线。', 'The legacy internal Ranking workflow is no longer part of the default product path or the current source of truth. The active product flow now centers on Market View, Buy Budget, and Rent Budget.'))}</p>",
+        f"<p>{escape(tr('旧的内部 Ranking 行为不再作为默认产品路径或当前真相基准。当前版本以 Market View、Buy Budget 和 Rent Budget 为主线。', 'The legacy internal Ranking workflow is no longer part of the default product path or the current canonical baseline. The active product flow now centers on Market View, Buy Budget, and Rent Budget.'))}</p>",
         unsafe_allow_html=True,
     )
     st.markdown(
