@@ -170,6 +170,7 @@ For each validated path:
 - [ ] Public Streamlit reads `Processed/mart_daily_rolling/` for daily trend data
 - [ ] Price-band logic can use the full internal fact-sales path
 - [ ] Latest visible date matches the deployed processed data
+- [ ] Internal and external deployment modes show the same default Market View KPI/date values for the same filters
 - [ ] KPI outputs remain consistent with the internal logic path
 - [ ] No fallback to cache paths exists in runtime behavior
 

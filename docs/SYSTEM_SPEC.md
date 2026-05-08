@@ -37,9 +37,11 @@ Public Streamlit rules:
 - functional pages are the current internal/full versions
 - external/public downgrade gates must not hide or disable functionality on functional pages
 - Streamlit Cloud should reflect the latest internal processed/current datasets included in deployment
+- Market View must read the full internal `Processed/mart_daily_rolling/` and `Processed/fact_sales/` paths in public deployment, not legacy public snapshots
 
 Public deployment safety gates:
 - public deployment keeps full internal analytical behavior
+- the product introduction homepage may mention NSW Valuation / government property records as the official transaction-data source
 - specific upstream listing platform names must not appear in user-facing UI, tooltips, captions, warnings, tables, or report text
 - user-facing listing provenance should use neutral wording such as `market listing data`, `listing data`, `market data`, or `publicly available market records`
 - report download remains internal-only until the report feature is production-ready

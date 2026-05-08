@@ -51,6 +51,7 @@ utils/
 ## Public Streamlit Data Layer
 - public Streamlit uses the same full functional data paths as internal mode
 - Market View reads the pipeline-backed `Processed/mart_daily_rolling/` and `Processed/fact_sales/` datasets
+- Market View cache keys include source parquet size/modified time so deploy data refreshes invalidate stale cached reads
 - Buy Budget and Rent Budget read the current listing datasets under `data/current/`
 - `Processed/dim/` remains the canonical dimension layer for geography attribution
 - `data/public_market_view/` is retained only as a legacy snapshot layer and is not the active full-public runtime path

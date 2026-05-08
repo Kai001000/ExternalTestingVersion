@@ -19,6 +19,7 @@ from .config import (
     IS_PUBLIC_MODE,
     LEGACY_DOMAIN_RENT_LISTINGS_PARQUET,
     LEGACY_DOMAIN_SALE_LISTINGS_PARQUET,
+    MART_DAILY_ROLLING_DIR,
     MART_MONTHLY_DIR,
     MART_WEEKLY_DIR,
     PUBLIC_MARKET_VIEW_DAILY_DIR,
@@ -1151,14 +1152,37 @@ def load_monthly(level: str, label: str) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(show_spinner=False)
 def load_daily_rolling(level: str) -> pl.DataFrame:
     level = _normalize_level(level)
     if level not in {"NSW", "REGION", "REGION16", "SUBURB", "POSTCODE"}:
         return pl.DataFrame()
+    return _load_daily_rolling_cached(level, _daily_rolling_source_signature(level))
+
+
+@st.cache_data(show_spinner=False)
+def _load_daily_rolling_cached(level: str, source_signature: tuple[str, int, int]) -> pl.DataFrame:
     if IS_PUBLIC_MODE:
         return _load_public_daily_rolling(level)
     return _build_filtered_daily_rolling(level)
+
+
+def _internal_daily_rolling_path(level: str) -> Path:
+    path_map = {
+        "NSW": MART_DAILY_ROLLING_DIR / "daily_rolling_nsw.parquet",
+        "REGION": MART_DAILY_ROLLING_DIR / "daily_rolling_region.parquet",
+        "REGION16": MART_DAILY_ROLLING_DIR / "daily_rolling_region16.parquet",
+        "SUBURB": MART_DAILY_ROLLING_DIR / "daily_rolling_suburb.parquet",
+        "POSTCODE": MART_DAILY_ROLLING_DIR / "daily_rolling_postcode.parquet",
+    }
+    return path_map[level]
+
+
+def _daily_rolling_source_signature(level: str) -> tuple[str, int, int]:
+    path = _public_daily_rolling_snapshot_path(level) if IS_PUBLIC_MODE else _internal_daily_rolling_path(level)
+    if not path.exists():
+        return (str(path), 0, 0)
+    stat = path.stat()
+    return (str(path), int(stat.st_size), int(stat.st_mtime_ns))
 
 
 def _public_daily_rolling_snapshot_path(level: str) -> Path:
@@ -1284,10 +1308,23 @@ def load_dim_postcode_gccsa() -> pl.DataFrame:
     return df
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _load_global_filtered_fact_sales() -> pl.DataFrame:
+def _fact_sales_source_signature() -> tuple[tuple[str, int, int], ...]:
     fact_dir = BASE_DIR / "Processed" / "fact_sales"
     fact_files = sorted(fact_dir.glob("fact_sales_*.parquet"))
+    return tuple(
+        (str(path), int(path.stat().st_size), int(path.stat().st_mtime_ns))
+        for path in fact_files
+        if path.exists()
+    )
+
+
+def _load_global_filtered_fact_sales() -> pl.DataFrame:
+    return _load_global_filtered_fact_sales_cached(_fact_sales_source_signature())
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_global_filtered_fact_sales_cached(source_signature: tuple[tuple[str, int, int], ...]) -> pl.DataFrame:
+    fact_files = [Path(item[0]) for item in source_signature]
     if not fact_files:
         return pl.DataFrame()
 

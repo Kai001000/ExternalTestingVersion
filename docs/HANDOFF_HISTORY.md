@@ -13,6 +13,19 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-05-08 — Homepage Redesign And Deploy Market Data Sync
+
+Context: Streamlit Cloud data parity | homepage product narrative | cache invalidation
+
+What changed:
+- Deploy branch Market View processed parquet files were synced to the latest local internal data.
+- Root cause of the Cloud/local mismatch was that the local latest parquet files were marked skip-worktree, so `git status` hid their difference from the deploy branch. The deploy commit still contained older 2026-04-16 Market View files.
+- Market View daily rolling and fact-sales cache keys now include source file size/modified time so redeploys or data-file refreshes invalidate stale cached reads without removing page-level caching.
+- Product homepage was redesigned around the data-source advantage: NSW Valuation / government property records, normal transactions, and off-market coverage.
+
+Validation target:
+- Default Market View should show data updated to 2026-04-30 with stable median $980,000 and stable cutoff 2026-03-26 for the same default NSW / HOUSE selection in both internal and external deployment modes.
+
 ### 2026-05-08 — Public Deployment Safety Gates For Source Labels And Reports
 
 Context: public Streamlit safety patch | full internal behavior retained | report and source-label restrictions
