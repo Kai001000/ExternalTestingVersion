@@ -2628,7 +2628,7 @@ def _subtype_counts(df: pd.DataFrame, group: str) -> pd.Series:
 
 
 def _category_option_label(label: str, count: int) -> str:
-    return label if IS_PUBLIC_MODE else f"{label} ({count:,})"
+    return label if IS_EXTERNAL_DEPLOYMENT or IS_PUBLIC_MODE else f"{label} ({count:,})"
 
 
 def _init_state() -> None:

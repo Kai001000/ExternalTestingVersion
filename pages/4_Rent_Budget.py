@@ -337,7 +337,7 @@ def _subtype_counts(df, group):
 
 
 def _category_option_label(label, count):
-    return label if IS_PUBLIC_MODE else f"{label} ({int(count):,})"
+    return label if IS_EXTERNAL_DEPLOYMENT or IS_PUBLIC_MODE else f"{label} ({int(count):,})"
 
 
 def _filter_external_extreme_rents(df: pd.DataFrame) -> pd.DataFrame:
