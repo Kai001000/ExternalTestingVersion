@@ -76,6 +76,8 @@ For each validated path:
 - [ ] KPI and chart render correctly for the region
 - [ ] No null postcode leakage remains for the intended mapped postcodes
 - [ ] No code or validation path assumes a fixed number of regions in the layer
+- [ ] Derived Market Region segment overlays come from `utils/region16_segments.py`, not duplicated local constants
+- [ ] Lower North Shore Core / Extended validation confirms Core postcodes `2060`, `2061`, `2088`, `2089`, `2090` and Extended postcode `2067`
 
 ## Buy Checklist
 - [ ] Sale filters apply correctly to the canonical sale filtered dataset

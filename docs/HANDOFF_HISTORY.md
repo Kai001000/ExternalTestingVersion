@@ -13,6 +13,20 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-05-28 — Market Region Segment Definition Consolidation
+
+Context: Market Region overlays | REGION16 compatibility | Lower North Shore Core / Extended
+
+What changed:
+- `REGION16_SEGMENT_DEFINITIONS` was consolidated into `utils/region16_segments.py`.
+- `utils/data.py` and `build_mart_daily_rolling.py` now import the shared segment definitions instead of carrying duplicated constants.
+- The base `dim_region16_mapping.csv` continues to define base Market Regions such as Lower North Shore.
+- Lower North Shore Core / Extended remain derived postcode-expanded segment overlays; postcode membership was not changed.
+
+Validation target:
+- `daily_rolling_region16.parquet` should continue to contain Lower North Shore, Lower North Shore — Core, and Lower North Shore — Extended.
+- Lower North Shore Core postcodes remain `2060`, `2061`, `2088`, `2089`, `2090`; Extended remains `2067`.
+
 ### 2026-05-08 — Homepage Redesign And Deploy Market Data Sync
 
 Context: Streamlit Cloud data parity | homepage product narrative | cache invalidation

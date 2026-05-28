@@ -1,6 +1,9 @@
 # build_mart_daily_rolling.py
 from pathlib import Path
+from typing import Optional
 import polars as pl
+
+from utils.region16_segments import REGION16_SEGMENT_DEFINITIONS
 
 BASE_DIR = Path(__file__).parent
 FACT_DIR = BASE_DIR / "Processed" / "fact_sales"
@@ -14,30 +17,6 @@ DIM_REGION16_PATH = DIM_DIR / "dim_region16_mapping.csv"
 PRICE_MAX = 100_000_000
 PRICE_MIN_EXCLUSIVE = 0
 ALLOWED_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
-# Legacy internal token = REGION16.
-# Canonical product-facing name = Market Region.
-REGION16_SEGMENT_DEFINITIONS = (
-    {
-        "base_region": "Lower North Shore",
-        "segment_region": "Lower North Shore \u2014 Core",
-        "postcodes": ("2060", "2061", "2088", "2089", "2090"),
-    },
-    {
-        "base_region": "Lower North Shore",
-        "segment_region": "Lower North Shore \u2014 Extended",
-        "postcodes": ("2067",),
-    },
-    {
-        "base_region": "Upper North Shore",
-        "segment_region": "Upper North Shore \u2014 Core",
-        "postcodes": ("2070", "2071", "2072", "2074"),
-    },
-    {
-        "base_region": "Upper North Shore",
-        "segment_region": "Upper North Shore \u2014 Extended",
-        "postcodes": ("2077",),
-    },
-)
 
 
 def _make_suburb_key_expr(col_name: str) -> pl.Expr:
@@ -195,8 +174,8 @@ def _expand_region16_segments(df: pl.DataFrame) -> pl.DataFrame:
 def _build_level(
     fact: pl.DataFrame,
     level: str,
-    dim_gccsa: pl.DataFrame | None = None,
-    dim_region16: pl.DataFrame | None = None,
+    dim_gccsa: Optional[pl.DataFrame] = None,
+    dim_region16: Optional[pl.DataFrame] = None,
 ) -> pl.DataFrame:
     if level == "NSW":
         df = fact.with_columns(pl.lit("NSW").alias("region"))

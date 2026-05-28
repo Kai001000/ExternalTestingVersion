@@ -26,6 +26,7 @@ from .config import (
     PUBLIC_MARKET_VIEW_PRICE_BAND_DIR,
     STANDARD_RESIDENTIAL_LISTING_CLASSIFICATION,
 )
+from .region16_segments import REGION16_SEGMENT_DEFINITIONS
 
 ANALYTICS_PRICE_MIN = 80_000
 ANALYTICS_PRICE_MAX = 20_000_000
@@ -36,30 +37,6 @@ ADAPTIVE_UPPER_MULTIPLIER = 1.5
 ADAPTIVE_MIN_HISTORY_ROWS = 50
 ALLOWED_REGION_GROUPS = {"Greater Sydney", "Rest of NSW"}
 EXTERNAL_MARKET_VIEW_FACT_BYTES_THRESHOLD = 40_000_000
-# Legacy internal token = REGION16.
-# Canonical product-facing name = Market Region.
-REGION16_SEGMENT_DEFINITIONS = (
-    {
-        "base_region": "Lower North Shore",
-        "segment_region": "Lower North Shore \u2014 Core",
-        "postcodes": ("2060", "2061", "2088", "2089", "2090"),
-    },
-    {
-        "base_region": "Lower North Shore",
-        "segment_region": "Lower North Shore \u2014 Extended",
-        "postcodes": ("2067",),
-    },
-    {
-        "base_region": "Upper North Shore",
-        "segment_region": "Upper North Shore \u2014 Core",
-        "postcodes": ("2070", "2071", "2072", "2074"),
-    },
-    {
-        "base_region": "Upper North Shore",
-        "segment_region": "Upper North Shore \u2014 Extended",
-        "postcodes": ("2077",),
-    },
-)
 EXTERNAL_SALE_DISPLAY_MIN_PRICE = 50_000
 EXTERNAL_SALE_DISPLAY_MAX_PRICE = 10_000_000
 EXTERNAL_RENT_DISPLAY_MIN_WEEKLY = 80

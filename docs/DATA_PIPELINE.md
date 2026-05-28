@@ -34,6 +34,8 @@ Market Region source mapping:
 - base source mapping remains `Reference/ABS/sydney_16_region_suburb_postcode_mapping.xlsx`
 - active canonical supplement for Market Region additions is `Reference/ABS/market_region_mapping_overrides.csv`
 - `Processed/dim/dim_region16_mapping.csv` now represents the canonical Market Region mapping through a legacy compatibility filename
+- `utils/region16_segments.py` is the single code source for derived Market Region segment overlays such as Lower North Shore Core / Extended
+- base `dim_region16_mapping.csv` defines the base Lower North Shore; Core / Extended rows are derived segment overlays and are postcode-expanded at build/runtime
 - new regions such as Forest District must be introduced through canonical mapping updates, not by UI-only logic
 - the current mapping model is postcode-based
 - partial postcode support is not available in the current architecture
@@ -96,6 +98,7 @@ Typical artifacts:
 
 Compatibility note:
 - `daily_rolling_region16.parquet` is the legacy filename for the Market Region daily rolling layer
+- Core / Extended segment overlays are included in this layer by applying `utils.region16_segments.REGION16_SEGMENT_DEFINITIONS` during mart build
 
 ### Monthly Marts
 Monthly outputs under:
