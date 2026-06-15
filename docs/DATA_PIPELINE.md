@@ -80,6 +80,52 @@ Canonical update flow:
 Current operational note:
 - monthly mart rebuild is a distinct pipeline concern and may not be included in every manual update-script execution path
 
+### 20260615 Validated Market View Update
+Latest validated package:
+- source package: `RawData/1 page update/20260615.zip`
+- update command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260615`
+- DAT extraction directory: `RawData/DAT/2026/20260615`
+- DAT files extracted: 122
+
+Validated outputs from the 20260615 run:
+- `RawData/manifest/dat_manifest.csv`: 2,883 rows, modified `2026-06-15 13:06:19`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 70,698 rows, latest `contract_date` `2026-06-11`, modified `2026-06-15 13:06:21`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,915 rows, latest date `2026-06-11`, modified `2026-06-15 13:06:23`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,423 rows, latest date `2026-06-11`, modified `2026-06-15 13:06:24`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 203,731 rows, latest date `2026-06-05`, modified `2026-06-15 13:06:24`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,781,027 rows, latest date `2026-06-11`, modified `2026-06-15 13:06:25`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,926,569 rows, latest date `2026-06-11`, modified `2026-06-15 13:06:26`
+
+Validation notes:
+- update pipeline completed without fatal error or traceback
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` remained selected and rendered an empty state in local Streamlit
+- deployment branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- final commit hash is reported in the session handoff after commit creation
+
+### 20260608 Validated Market View Update
+Latest validated package:
+- source package: `RawData/1 page update/20260608.zip`
+- update command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260608`
+- DAT extraction directory: `RawData/DAT/2026/20260608`
+- DAT files extracted: 126
+
+Validated outputs from the 20260608 run:
+- `RawData/manifest/dat_manifest.csv`: 2,761 rows, modified `2026-06-08 12:44:38`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 67,239 rows, latest `contract_date` `2026-06-04`, modified `2026-06-08 12:44:41`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,901 rows, latest date `2026-06-04`, modified `2026-06-08 12:44:42`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,395 rows, latest date `2026-06-04`, modified `2026-06-08 12:44:43`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 203,557 rows, latest date `2026-06-01`, modified `2026-06-08 12:44:43`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,765,671 rows, latest date `2026-06-04`, modified `2026-06-08 12:44:44`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,920,841 rows, latest date `2026-06-04`, modified `2026-06-08 12:44:45`
+
+Validation after each update must include:
+- source package path and extracted DAT count
+- manifest row count and package records
+- fact parquet row count, schema, latest `contract_date`, and latest-period row counts
+- daily rolling row counts and latest dates for NSW, region, Market Region/`region16`, suburb, and postcode
+- deploy branch/folder alignment for active Streamlit-facing artifacts
+- selector regression spot-checks where area options are involved
+
 ## Downstream Outputs
 ### Fact Sales
 Per-year fact outputs:
@@ -112,6 +158,8 @@ Compatibility note:
 - rebuild validation should confirm no schema break
 - rebuild validation should confirm no abnormal row-count collapse
 - deployment/data-sync work should verify that processed artifacts and deployed branch state are aligned when a data refresh is intended for release
+- Market View suburb/postcode selector options must be generated from stable dimensions and full rolling coverage, not from the currently filtered visible rows
+- A valid suburb/postcode selection with no rows under the current dwelling/date filters must render an empty state rather than rewriting selection state
 
 ## Deployment-Relevant Notes
 Current deployment baseline recorded in the docs history:

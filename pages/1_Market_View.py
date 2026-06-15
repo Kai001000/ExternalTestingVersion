@@ -12,6 +12,7 @@ from utils.charts import DISPLAY_MODE_DUAL, DISPLAY_MODE_LONG, DISPLAY_MODE_SHOR
 from utils.config import BASE_DIR, IS_PUBLIC_MODE
 from utils.data import ANALYTICS_PRICE_MAX, ANALYTICS_PRICE_MIN, _expand_region16_segments_daily, add_underlying_trend, load_daily_rolling, load_dim_postcode_gccsa, load_dim_region16, load_dim_suburb_postcode, load_filtered_fact_sales, load_public_market_view_price_band_snapshot
 from utils.i18n import ensure_lang, t, tr
+from utils.market_view_area import build_area_options_from_frames, coerce_selected_area_label, filter_market_scope_for_regions
 from utils.perf import PagePerf, render_internal_timing_summary
 from utils.tables import apply_right_edge_stability_rule, fmt_date, fmt_float0, fmt_int, fmt_pct
 from utils.ui import inject_app_theme, sidebar_common
@@ -1557,16 +1558,7 @@ def get_area_options():
     daily_suburb = load_daily_rolling("SUBURB")
     daily_postcode = load_daily_rolling("POSTCODE")
     dim_suburb_postcode = load_dim_suburb_postcode()
-    area_items = []
-    if not daily_suburb.is_empty() and not dim_suburb_postcode.is_empty():
-        suburb_map = dict(zip(dim_suburb_postcode["suburb"].str.strip_chars().to_list(), dim_suburb_postcode["postcode"].str.strip_chars().to_list()))
-        for suburb in daily_suburb["region"].unique().to_list():
-            postcode = suburb_map.get(suburb, "")
-            area_items.append((f"{suburb} ({postcode})" if postcode else suburb, suburb))
-    if not daily_postcode.is_empty():
-        for postcode in daily_postcode["region"].unique().to_list():
-            area_items.append((f"Postcode {postcode}", postcode))
-    return sorted(area_items, key=lambda item: item[0])
+    return build_area_options_from_frames(daily_suburb, daily_postcode, dim_suburb_postcode)
 
 
 def _load_level_daily(level: str) -> pl.DataFrame:
@@ -1599,8 +1591,9 @@ def _ensure_default_region(level: str, region_options: list[str]):
         key = f"mv_chart_region_{level.lower()}"
     else:
         key = "mv_chart_region_area"
-    if st.session_state.get(key) not in region_options:
-        st.session_state[key] = region_options[0]
+    selected_label = coerce_selected_area_label(st.session_state.get(key), region_options)
+    if selected_label is not None and st.session_state.get(key) != selected_label:
+        st.session_state[key] = selected_label
 
 
 def _prepare_region_selector_state(
@@ -1618,79 +1611,7 @@ def _prepare_region_selector_state(
     region_options, region_value_map = _resolve_region_options(level, daily)
     _ensure_default_region(level, region_options)
 
-    if level == "AREA" and region_options:
-        area_key = "mv_chart_region_area"
-        if not _area_label_has_visible_rows(
-            daily,
-            region_value_map,
-            st.session_state.get(area_key),
-            dwelling=dwelling,
-            start_ts=start_ts,
-            end_ts=end_ts,
-        ):
-            default_label = _pick_default_area_label(
-                daily,
-                region_options,
-                region_value_map,
-                dwelling=dwelling,
-                start_ts=start_ts,
-                end_ts=end_ts,
-            )
-            if default_label:
-                st.session_state[area_key] = default_label
-
     return region_options, region_value_map
-
-
-def _pick_default_area_label(
-    daily: pl.DataFrame,
-    region_options: list[str],
-    region_value_map: dict[str, str],
-    *,
-    dwelling: str,
-    start_ts: pd.Timestamp,
-    end_ts: pd.Timestamp,
-) -> str | None:
-    if not region_options or daily.is_empty():
-        return region_options[0] if region_options else None
-
-    visible_regions = set(
-        daily.filter(
-            (pl.col("dwelling_group") == dwelling)
-            & (pl.col("date") >= start_ts)
-            & (pl.col("date") <= end_ts)
-        )["region"].unique().to_list()
-    )
-    if not visible_regions:
-        return region_options[0]
-
-    for label in region_options:
-        value = region_value_map.get(label)
-        if value in visible_regions:
-            return label
-    return region_options[0]
-
-
-def _area_label_has_visible_rows(
-    daily: pl.DataFrame,
-    region_value_map: dict[str, str],
-    label: str | None,
-    *,
-    dwelling: str,
-    start_ts: pd.Timestamp,
-    end_ts: pd.Timestamp,
-) -> bool:
-    if not label:
-        return False
-    value = region_value_map.get(label)
-    if not value:
-        return False
-    return not daily.filter(
-        (pl.col("dwelling_group") == dwelling)
-        & (pl.col("region") == value)
-        & (pl.col("date") >= start_ts)
-        & (pl.col("date") <= end_ts)
-    ).is_empty()
 
 
 def _resolve_region_selection(level: str, region_value_map: dict[str, str]):
@@ -2110,9 +2031,9 @@ def main():
             df_scope = daily.filter(pl.col("dwelling_group") == dwelling).to_pandas()
             df_scope["date"] = pd.to_datetime(df_scope["date"]).dt.normalize()
             if level != "NSW":
-                df_scope = df_scope[df_scope["region"].isin(regions_selected)]
+                df_scope = filter_market_scope_for_regions(df_scope, level, regions_selected)
             if df_scope.empty:
-                st.info(t("no_data"))
+                st.info(t("market_view_no_selection_data"))
                 return
 
             one_year_ago = pd.to_datetime(daily["date"].max()) - pd.DateOffset(years=1)
@@ -2137,7 +2058,7 @@ def main():
             )
             summary_visible_df = summary_full_df[(summary_full_df["date"] >= start_ts) & (summary_full_df["date"] <= end_ts)].copy()
             if summary_visible_df.empty:
-                st.info(t("no_data"))
+                st.info(t("market_view_no_selection_data"))
                 return
             focus_metrics = _build_focus_metrics(
                 plot_df_all,

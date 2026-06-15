@@ -57,6 +57,15 @@ utils/
 - `data/public_market_view/` is retained only as a legacy snapshot layer and is not the active full-public runtime path
 - `data/cache/` remains disposable and must not act as a runtime dependency
 
+Deployment data sync checklist:
+- active deploy branch baseline: `deploy/streamlit-cloud-safe-2026-03-29`
+- sync Market View refreshes by committing `Processed/fact_sales/fact_sales_2026.parquet`, `Processed/mart_daily_rolling/daily_rolling_*.parquet`, and `RawData/manifest/dat_manifest.csv`
+- do not treat `data/public_market_view/` as the active deployment data layer unless the product mode is deliberately changed back to legacy snapshots
+- exclude local caches, virtualenvs, `__pycache__`, debug files, and unrelated worktree changes from deployment data commits
+- post-sync smoke check should start the current Streamlit entry point with internal mode, for example:
+  - PowerShell: `$env:APP_MODE="internal"; .\.venv\Scripts\python.exe -m streamlit run home.py --server.port 8503`
+  - If a deployment wrapper named `app.py` exists in a future branch, the equivalent wrapper smoke command is `$env:APP_MODE="internal"; .\.venv\Scripts\python.exe -m streamlit run app.py --server.port 8503`
+
 ## Page and Module Responsibilities
 ### Market View
 Responsibilities:

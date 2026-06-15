@@ -13,6 +13,83 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-06-15 — Market View Weekly Data Update 20260615
+
+Context: weekly Market View data refresh | Streamlit deploy branch data sync | selector empty-state regression check
+
+Source and command:
+- Source package: `RawData/1 page update/20260615.zip`
+- Command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260615`
+- DAT destination: `RawData/DAT/2026/20260615`
+- DAT files extracted: 122
+
+Validated outputs:
+- `RawData/manifest/dat_manifest.csv`: 2,883 rows, modified `2026-06-15 13:06:19`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 70,698 rows, latest `contract_date` `2026-06-11`, modified `2026-06-15 13:06:21`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,915 rows, latest date `2026-06-11`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,423 rows, latest date `2026-06-11`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 203,731 rows, latest date `2026-06-05`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,781,027 rows, latest date `2026-06-11`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,926,569 rows, latest date `2026-06-11`
+
+Validation:
+- Pipeline completed successfully with no fatal error or traceback.
+- `.\.venv\Scripts\python.exe -m pytest` was attempted but the `.venv` environment does not have `pytest` installed.
+- `.\.venv311\Scripts\python.exe -m pytest` was attempted but `.venv311` also does not have `pytest` installed.
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 7 tests.
+- Local Streamlit smoke test used `home.py` on port `8510`; Market View loaded, latest date `2026-06-11` was visible, and NSW / Region / Market Region views showed no UI exception.
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` rendered the empty-state message and kept `MACQUARIE PARK (2113)` selected.
+
+Deployment sync:
+- Branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- Active deploy data files are the tracked `Processed/fact_sales/`, `Processed/mart_daily_rolling/`, and `RawData/manifest/dat_manifest.csv` artifacts.
+- `RawData/DAT/` and weekly source zip files remain ignored raw inputs and were not staged for deployment.
+- Final commit hash is reported in the session handoff after commit creation.
+
+### 2026-06-08 — Market View Area Selector Fix And 20260608 Data Sync
+
+Context: Market View suburb/postcode selector | Macquarie Park empty state | weekly data refresh | deploy branch data parity
+
+What changed:
+- Fixed the Market View area selector reset bug for `mv_chart_region_area`.
+- Root cause: `_prepare_region_selector_state()` treated a valid area with no visible rows under the current dwelling/date filters as invalid and overwrote `st.session_state["mv_chart_region_area"]` before the selectbox rendered.
+- Regression case: `MACQUARIE PARK (2113)` exists as suburb `MACQUARIE PARK`, postcode `2113`, mapped to `Ryde / Northern Suburbs`; default `HOUSE + 1 Year` has no visible rows and must keep the selection while showing an empty-state message.
+- Area options now come from stable suburb/postcode dimension plus full rolling suburb/postcode coverage, not from the currently visible filtered rows.
+- Downstream area filtering now uses normalized suburb/postcode comparison.
+- Empty-state copy: `No data available for this selection under the current filters.`
+
+Files involved in selector fix:
+- `pages/1_Market_View.py`
+- `utils/market_view_area.py`
+- `utils/i18n.py`
+- `tests/test_market_view_area_selection.py`
+
+20260608 data update:
+- Source package: `RawData/1 page update/20260608.zip`
+- Command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260608`
+- DAT destination: `RawData/DAT/2026/20260608`
+- DAT files extracted: 126
+- `RawData/manifest/dat_manifest.csv`: 2,761 rows, modified `2026-06-08 12:44:38`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 67,239 rows, latest `contract_date` `2026-06-04`, modified `2026-06-08 12:44:41`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,901 rows, latest date `2026-06-04`, modified `2026-06-08 12:44:42`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,395 rows, latest date `2026-06-04`, modified `2026-06-08 12:44:43`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 203,557 rows, latest date `2026-06-01`, modified `2026-06-08 12:44:43`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,765,671 rows, latest date `2026-06-04`, modified `2026-06-08 12:44:44`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,920,841 rows, latest date `2026-06-04`, modified `2026-06-08 12:44:45`
+
+Validation:
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed, 7 tests.
+- `.\.venv\Scripts\python.exe -m unittest discover -s tests` passed, 7 tests total.
+- `py_compile` passed for the active entry/page/data/update modules.
+- `app.py` was not present in the repo root; local static validation used `home.py` and `pages/1_Market_View.py`.
+
+Deployment sync:
+- Branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- Synced/committed active Streamlit-facing processed artifacts under `Processed/fact_sales/` and `Processed/mart_daily_rolling/`, plus `RawData/manifest/dat_manifest.csv`.
+- Commit: `8c7af59069b8d3dbc5817d0c69e40c8fc6a3e351` (`Update Market View data for 20260608`)
+- Push status: not pushed.
+- `data/public_market_view/` remains a legacy snapshot layer and was not updated for this run.
+
 ### 2026-05-28 — Market Region Segment Definition Consolidation
 
 Context: Market Region overlays | REGION16 compatibility | Lower North Shore Core / Extended

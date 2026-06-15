@@ -68,6 +68,13 @@ For each validated path:
 - [ ] Forest District appears as a selectable Market Region
 - [ ] Forest District Market View scope renders without exception for both `HOUSE` and `UNIT`
 - [ ] Presentation-only changes do not alter latest stable median, latest stable date, stable YoY, or price-band outputs for the audited spot-check cases
+- [ ] Suburb/postcode area selector state remains stable across Streamlit reruns
+- [ ] Area selector widget key `mv_chart_region_area` is not overwritten only because the current dwelling/date filters return no rows
+- [ ] Area options come from stable dimensions/full suburb-postcode rolling coverage, not the currently filtered visible dataframe
+- [ ] Empty Market View area selections render `No data available for this selection under the current filters.` instead of resetting the selector
+- [ ] Regression case: selecting `MACQUARIE PARK (2113)` with default `HOUSE + 1 Year` keeps `MACQUARIE PARK (2113)` selected and shows the empty-state message
+- [ ] `MACQUARIE PARK` / postcode `2113` remains mapped to `Ryde / Northern Suburbs`
+- [ ] `tests/test_market_view_area_selection.py` passes after selector or area-filter changes
 
 ## Market Region Validation
 - [ ] Region exists in the canonical Market Region mapping
@@ -161,11 +168,28 @@ For each validated path:
 - [ ] Expected output artifacts were refreshed
 - [ ] Output timestamps are recent for the touched artifacts
 - [ ] Latest available date in rebuilt data is sensible
+- [ ] Latest-period row counts are recorded for newly added dates
 - [ ] Row count did not collapse abnormally
 - [ ] Schema did not break unexpectedly
 - [ ] Market Region mapping postcodes expected for the change are populated and not null in the compatibility dim
 - [ ] Legacy `region16` outputs were refreshed if the Market Region layer changed
 - [ ] Deployment/data-sync assumptions were rechecked if the rebuild is intended for release
+- [ ] Macquarie Park / postcode `2113` still appears after Market View data updates
+
+### 2026-06-15 Market View Data Refresh Validation
+- [x] Required update/rebuild script completed without crash: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260615`
+- [x] Source ZIP found: `RawData/1 page update/20260615.zip`
+- [x] DAT extraction directory exists: `RawData/DAT/2026/20260615`
+- [x] DAT count recorded: 122
+- [x] Manifest refreshed: 2,883 rows, modified `2026-06-15 13:06:19`
+- [x] Fact sales refreshed: `fact_sales_2026.parquet`, 70,698 rows, max `contract_date` `2026-06-11`
+- [x] Daily rolling refreshed for NSW, Region, Market Region/`region16`, suburb, and postcode
+- [x] Local Streamlit smoke test loaded Market View with latest visible date `2026-06-11`
+- [x] NSW, Region, and Market Region views rendered without UI exception in local Streamlit smoke validation
+- [x] `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` rendered an empty state while keeping the selected area stable
+- [x] Pipeline and smoke validation produced no fatal error or traceback
+- [x] Full pytest was attempted, but local virtual environments do not currently include `pytest`
+- [x] Selector regression unit coverage passed via `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection`
 
 ## Public Full-Data Validation
 - [ ] Public Streamlit Market View renders without crash
