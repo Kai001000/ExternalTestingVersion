@@ -76,6 +76,21 @@ For each validated path:
 - [ ] `MACQUARIE PARK` / postcode `2113` remains mapped to `Ryde / Northern Suburbs`
 - [ ] `tests/test_market_view_area_selection.py` passes after selector or area-filter changes
 
+### 2026-06-22 Market View Data Update Validation
+- [x] Source package `RawData/1 page update/20260622.zip` was ingested with `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260622`.
+- [x] DAT extraction directory `RawData/DAT/2026/20260622` contains 123 `.DAT` files.
+- [x] `RawData/manifest/dat_manifest.csv` refreshed to 3,006 rows.
+- [x] `Processed/fact_sales/fact_sales_2026.parquet` refreshed to 74,725 rows with latest `contract_date` `2026-06-18`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_nsw.parquet` refreshed to 11,929 rows with latest date `2026-06-18`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_region.parquet` refreshed to 23,451 rows with latest date `2026-06-18`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_region16.parquet` refreshed to 204,238 rows with latest date `2026-06-18`.
+- [x] `.\.venv\Scripts\python.exe -m pytest` was attempted; current `.venv` does not have `pytest` installed.
+- [x] `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 7 tests.
+- [x] `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `scripts/update_market_view_from_zip.py`, `build_fact_sales_year.py`, `refresh_dat_manifest.py`, and `build_mart_daily_rolling.py`.
+- [x] Streamlit AppTest rendered NSW, Region, and Market Region/`REGION16` views without exceptions and showed latest date `2026-06-18`.
+- [x] Local Streamlit server smoke on port `8510` returned 200 from `/_stcore/health` and 200 from `/`; the server process was stopped after validation.
+- [x] Regression case `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` kept the selector on `MACQUARIE PARK (2113)` and displayed `当前选择在现有筛选条件下暂无数据。`
+
 ## Market Region Validation
 - [ ] Region exists in the canonical Market Region mapping
 - [ ] Region appears in the relevant rolling parquet output

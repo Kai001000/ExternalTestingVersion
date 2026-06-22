@@ -13,6 +13,40 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-06-22 — Market View Weekly Data Update 20260622
+
+Context: weekly Market View data refresh | Streamlit deploy branch data sync | selector empty-state regression check
+
+Source and command:
+- Source package: `RawData/1 page update/20260622.zip`
+- Command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260622`
+- DAT destination: `RawData/DAT/2026/20260622`
+- DAT files extracted: 123
+
+Validated outputs:
+- `RawData/manifest/dat_manifest.csv`: 3,006 rows, modified `2026-06-22 17:35:40`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 74,725 rows, latest `contract_date` `2026-06-18`, modified `2026-06-22 17:35:43`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,929 rows, latest date `2026-06-18`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,451 rows, latest date `2026-06-18`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 204,238 rows, latest date `2026-06-18`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,797,460 rows, latest date `2026-06-18`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,932,948 rows, latest date `2026-06-18`
+
+Validation:
+- Pipeline completed successfully with no fatal error or traceback.
+- `.\.venv\Scripts\python.exe -m pytest` was attempted but the `.venv` environment does not have `pytest` installed.
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 7 tests.
+- `py_compile` passed for `home.py`, `pages/1_Market_View.py`, Market View helpers, and the update/build scripts used in the run.
+- Streamlit AppTest loaded Market View with no exceptions for NSW, Region, and Market Region/`REGION16`; latest date `2026-06-18` was visible.
+- Local Streamlit server smoke used `home.py` on port `8510`; health endpoint returned 200 and `http://localhost:8510` returned 200 before the server was stopped.
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` kept `MACQUARIE PARK (2113)` selected and rendered `当前选择在现有筛选条件下暂无数据。`
+
+Deployment sync:
+- Branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- Active deploy data files are the tracked `Processed/fact_sales/`, `Processed/mart_daily_rolling/`, and `RawData/manifest/dat_manifest.csv` artifacts.
+- `RawData/DAT/`, weekly source zip files, virtualenvs, cache/temp files, and unrelated dirty source/doc files were not staged for deployment.
+- Final commit hash is reported in the session handoff after commit creation.
+
 ### 2026-06-15 — Market View Weekly Data Update 20260615
 
 Context: weekly Market View data refresh | Streamlit deploy branch data sync | selector empty-state regression check

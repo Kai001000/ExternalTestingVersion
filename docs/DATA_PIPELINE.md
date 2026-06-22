@@ -80,6 +80,30 @@ Canonical update flow:
 Current operational note:
 - monthly mart rebuild is a distinct pipeline concern and may not be included in every manual update-script execution path
 
+### 20260622 Validated Market View Update
+Latest validated package:
+- source package: `RawData/1 page update/20260622.zip`
+- update command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260622`
+- DAT extraction directory: `RawData/DAT/2026/20260622`
+- DAT files extracted: 123
+
+Validated outputs from the 20260622 run:
+- `RawData/manifest/dat_manifest.csv`: 3,006 rows, modified `2026-06-22 17:35:40`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 74,725 rows, latest `contract_date` `2026-06-18`, modified `2026-06-22 17:35:43`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,929 rows, latest date `2026-06-18`, modified `2026-06-22 17:35:45`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,451 rows, latest date `2026-06-18`, modified `2026-06-22 17:35:46`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 204,238 rows, latest date `2026-06-18`, modified `2026-06-22 17:35:46`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,797,460 rows, latest date `2026-06-18`, modified `2026-06-22 17:35:47`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,932,948 rows, latest date `2026-06-18`, modified `2026-06-22 17:35:48`
+
+Validation notes:
+- update pipeline completed without fatal error or traceback
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 7 tests
+- Streamlit AppTest confirmed NSW, Region, and Market Region/`REGION16` views rendered without exceptions and latest date `2026-06-18` was visible
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` remained selected and rendered an empty state in Market View
+- deployment branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- final commit hash is reported in the session handoff after commit creation
+
 ### 20260615 Validated Market View Update
 Latest validated package:
 - source package: `RawData/1 page update/20260615.zip`
