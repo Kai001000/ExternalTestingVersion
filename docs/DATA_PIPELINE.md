@@ -80,6 +80,42 @@ Canonical update flow:
 Current operational note:
 - monthly mart rebuild is a distinct pipeline concern and may not be included in every manual update-script execution path
 
+### 20260629 Validated Market View Update
+Latest validated package:
+- source package: `RawData/1 page update/20260629.zip`
+- update command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260629`
+- DAT extraction directory: `RawData/DAT/2026/20260629`
+- DAT files extracted: 127
+
+Validated outputs from the 20260629 run:
+- `RawData/manifest/dat_manifest.csv`: 3,133 rows, modified `2026-06-29 18:26:31`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 79,472 rows, latest `contract_date` `2026-06-25`, modified `2026-06-29 18:26:33`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,943 rows, latest date `2026-06-25`, modified `2026-06-29 18:26:35`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,479 rows, latest date `2026-06-25`, modified `2026-06-29 18:26:36`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 204,556 rows, latest date `2026-06-25`, modified `2026-06-29 18:26:36`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,815,097 rows, latest date `2026-06-25`, modified `2026-06-29 18:26:37`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,939,821 rows, latest date `2026-06-25`, modified `2026-06-29 18:26:38`
+
+Comparison to 20260622:
+- DAT count: 123 -> 127
+- manifest rows: 3,006 -> 3,133
+- `fact_sales_2026` rows: 74,725 -> 79,472
+- `fact_sales_2026` latest `contract_date`: `2026-06-18` -> `2026-06-25`
+- NSW rolling rows/latest date: 11,929 / `2026-06-18` -> 11,943 / `2026-06-25`
+- Region rolling rows/latest date: 23,451 / `2026-06-18` -> 23,479 / `2026-06-25`
+- Market Region/`REGION16` rolling rows/latest date: 204,238 / `2026-06-18` -> 204,556 / `2026-06-25`
+
+Validation notes:
+- update pipeline completed without fatal error or traceback
+- `.\.venv\Scripts\python.exe -m pytest` was attempted; current `.venv` does not have `pytest` installed
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 7 tests
+- `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `scripts/update_market_view_from_zip.py`, `build_fact_sales_year.py`, `refresh_dat_manifest.py`, and `build_mart_daily_rolling.py`
+- Streamlit AppTest confirmed NSW, Region, and Market Region/`REGION16` views rendered without exceptions and latest date `2026-06-25` was visible
+- local Streamlit server smoke on port `8510` returned 200 from `/_stcore/health` and 200 from `/`; the server process was stopped after validation
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` remained selected and rendered an empty state in Market View
+- deployment branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- final commit hash is reported in the session handoff after commit creation
+
 ### 20260622 Validated Market View Update
 Latest validated package:
 - source package: `RawData/1 page update/20260622.zip`
