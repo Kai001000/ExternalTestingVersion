@@ -13,6 +13,50 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-07-06 — Market View Weekly Data Update 20260706
+
+Context: weekly Market View data refresh | Streamlit deploy branch data sync | selector empty-state regression check
+
+Source and command:
+- Source package: `RawData/1 page update/20260706.zip`
+- Command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260706`
+- DAT destination: `RawData/DAT/2026/20260706`
+- DAT files extracted: 126
+
+Validated outputs:
+- `RawData/manifest/dat_manifest.csv`: 3,259 rows, modified `2026-07-06 08:55:35`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 83,176 rows, latest `contract_date` `2026-07-01`, modified `2026-07-06 08:55:38`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,955 rows, latest date `2026-07-01`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,503 rows, latest date `2026-07-01`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 204,763 rows, latest date `2026-06-30`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,834,425 rows, latest date `2026-07-01`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,946,820 rows, latest date `2026-07-01`
+
+Comparison to 20260629:
+- DAT count decreased from 127 to 126.
+- Manifest rows increased from 3,133 to 3,259.
+- `fact_sales_2026` rows increased from 79,472 to 83,176, with 55 rows after previous max `contract_date` `2026-06-25`.
+- NSW rolling rows increased from 11,943 to 11,955; latest date advanced from `2026-06-25` to `2026-07-01`.
+- Region rolling rows increased from 23,479 to 23,503; latest date advanced from `2026-06-25` to `2026-07-01`.
+- Market Region/`REGION16` rolling rows increased from 204,556 to 204,763; latest date advanced from `2026-06-25` to `2026-06-30`.
+- The latest post-`2026-06-25` fact rows are thin; treat the newest few days as provisional registration-lag data rather than a stable trend signal.
+
+Validation:
+- Pipeline completed successfully with no fatal error or traceback.
+- `.\.venv\Scripts\python.exe -m pytest` was attempted but the `.venv` environment does not have `pytest` installed.
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 7 tests.
+- `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `scripts/update_market_view_from_zip.py`, `build_fact_sales_year.py`, `refresh_dat_manifest.py`, and `build_mart_daily_rolling.py`.
+- Streamlit AppTest rendered NSW, Region, and Market Region/`REGION16` views without exceptions; `load_daily_rolling()` read latest dates `2026-07-01`, `2026-07-01`, and `2026-06-30` respectively.
+- Local Streamlit server smoke used `home.py` on port `8510`; health endpoint returned 200, `/` returned 200, and `/Market_View` returned 200 before the server was stopped.
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` kept `MACQUARIE PARK (2113)` selected and rendered the `market_view_no_selection_data` empty state.
+
+Deployment sync:
+- Branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- Active deploy data files are the tracked `Processed/fact_sales/`, `Processed/mart_daily_rolling/`, and `RawData/manifest/dat_manifest.csv` artifacts.
+- `data/public_market_view/` remains a legacy snapshot layer and was not updated for this run.
+- `RawData/1 page update/20260706.zip`, `RawData/DAT/`, weekly source zip files, virtualenvs, cache/temp files, and unrelated dirty source/doc files were not staged for deployment.
+- Final commit hash is reported in the session handoff after commit creation.
+
 ### 2026-06-29 — Market View Weekly Data Update 20260629
 
 Context: weekly Market View data refresh | Streamlit deploy branch data sync | selector empty-state regression check
