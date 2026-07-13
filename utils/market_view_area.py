@@ -42,7 +42,13 @@ def coerce_selected_area_label(selected_label: object, options: list[str]) -> st
     if not options:
         return None
     selected = str(selected_label) if selected_label is not None else None
-    return selected if selected in options else options[0]
+    if selected in options:
+        return selected
+    selected_key = normalize_area_suburb_key(selected)
+    for option in options:
+        if normalize_area_suburb_key(option) == selected_key:
+            return option
+    return options[0]
 
 
 def _unique_clean_values(frame: pl.DataFrame, column: str) -> list[str]:

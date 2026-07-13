@@ -35,6 +35,13 @@ class MarketViewAreaSelectionTests(unittest.TestCase):
 
         self.assertEqual(selected, "Macquarie Park (2113)")
 
+    def test_selected_area_matches_existing_option_case_insensitively(self):
+        options = ["AARONS PASS", "MACQUARIE PARK (2113)", "Postcode 2113"]
+
+        selected = coerce_selected_area_label("Macquarie Park (2113)", options)
+
+        self.assertEqual(selected, "MACQUARIE PARK (2113)")
+
     def test_missing_selected_area_falls_back_to_first_available_option(self):
         options = ["Airds (2560)", "Macquarie Park (2113)"]
 

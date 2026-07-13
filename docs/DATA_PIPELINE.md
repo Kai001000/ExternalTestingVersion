@@ -80,6 +80,44 @@ Canonical update flow:
 Current operational note:
 - monthly mart rebuild is a distinct pipeline concern and may not be included in every manual update-script execution path
 
+### 20260713 Validated Market View Update
+Latest validated package:
+- source package: `RawData/1 page update/20260713.zip`
+- update command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260713`
+- DAT extraction directory: `RawData/DAT/2026/20260713`
+- DAT files extracted: 127
+
+Validated outputs from the 20260713 run:
+- `RawData/manifest/dat_manifest.csv`: 3,386 rows, modified `2026-07-13 20:24:12`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 86,050 rows, latest `contract_date` `2026-07-09`, modified `2026-07-13 20:24:15`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 11,971 rows, latest date `2026-07-09`, modified `2026-07-13 20:24:16`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,535 rows, latest date `2026-07-09`, modified `2026-07-13 20:24:17`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 205,063 rows, latest date `2026-07-07`, modified `2026-07-13 20:24:17`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,849,316 rows, latest date `2026-07-09`, modified `2026-07-13 20:24:19`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,952,868 rows, latest date `2026-07-09`, modified `2026-07-13 20:24:20`
+
+Comparison to 20260706:
+- DAT count: 126 -> 127
+- manifest rows: 3,259 -> 3,386
+- `fact_sales_2026` rows: 83,176 -> 86,050
+- `fact_sales_2026` latest `contract_date`: `2026-07-01` -> `2026-07-09`
+- rows after previous max `contract_date` `2026-07-01`: 30
+- NSW rolling rows/latest date: 11,955 / `2026-07-01` -> 11,971 / `2026-07-09`
+- Region rolling rows/latest date: 23,503 / `2026-07-01` -> 23,535 / `2026-07-09`
+- Market Region/`REGION16` rolling rows/latest date: 204,763 / `2026-06-30` -> 205,063 / `2026-07-07`
+
+Validation notes:
+- update pipeline completed without fatal error or traceback
+- `.\.venv\Scripts\python.exe -m pytest` was attempted; current `.venv` does not have `pytest` installed
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 8 tests
+- `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `utils/tables.py`, and `tests/test_market_view_area_selection.py`
+- local Streamlit server smoke on port `8510` returned 200 from `/_stcore/health`; `/` and `/Market_View` loaded without Traceback/Exception text, and Market View rendered data as of `2026-07-09`
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` remained selected after case-insensitive option coercion and produced the expected empty filtered result
+- Region16 latest date lag is explained by underlying mapped fact coverage: Region16-mapped fact rows after `2026-07-01` total 5 and max at `2026-07-07`
+- deployment branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- final commit hash is reported in the session handoff after commit creation
+- latest post-`2026-07-01` fact rows are thin and should be treated as provisional registration-lag data
+
 ### 20260706 Validated Market View Update
 Latest validated package:
 - source package: `RawData/1 page update/20260706.zip`
