@@ -76,6 +76,29 @@ For each validated path:
 - [ ] `MACQUARIE PARK` / postcode `2113` remains mapped to `Ryde / Northern Suburbs`
 - [ ] `tests/test_market_view_area_selection.py` passes after selector or area-filter changes
 
+### 2026-07-20 Market View Data Update Validation
+- [x] Source package `RawData/1 page update/20260720.zip` was ingested with `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260720`.
+- [x] The primary wrapper completed extraction, manifest refresh, and fact rebuild; the mart step initially exited with native code `3221225477`.
+- [x] Recovery command `.\.venv\Scripts\python.exe -X faulthandler build_mart_daily_rolling.py` completed successfully and refreshed the active rolling artifacts.
+- [x] DAT extraction directory `RawData/DAT/2026/20260720` contains 127 `.DAT` files.
+- [x] `RawData/manifest/dat_manifest.csv` refreshed to 3,513 rows.
+- [x] `Processed/fact_sales/fact_sales_2026.parquet` refreshed to 88,519 rows with latest `contract_date` `2026-07-16`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_nsw.parquet` refreshed to 11,985 rows with latest date `2026-07-16`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_region.parquet` refreshed to 23,563 rows with latest date `2026-07-16`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_region16.parquet` refreshed to 205,170 rows with latest date `2026-07-09`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_suburb.parquet` refreshed to 9,863,975 rows with latest date `2026-07-16`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_postcode.parquet` refreshed to 3,958,728 rows with latest date `2026-07-16`.
+- [x] Compared with 20260713: manifest rows advanced 3,386 -> 3,513; `fact_sales_2026` rows advanced 86,050 -> 88,519; NSW/Region max dates advanced to `2026-07-16`; Market Region/`REGION16` max date advanced to `2026-07-09`.
+- [x] `fact_sales_2026` contains 12 rows after previous max `contract_date` `2026-07-09`; newest days remain provisional due to registration lag.
+- [x] Region16 latest-date lag was checked against underlying mapped fact coverage: Region16-mapped fact rows after `2026-07-09` total 0.
+- [x] `.\.venv\Scripts\python.exe -m pytest` was attempted; current `.venv` does not have `pytest` installed.
+- [x] `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 8 tests.
+- [x] `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `utils/tables.py`, and `tests/test_market_view_area_selection.py`.
+- [x] Local Streamlit server smoke on port `8510` returned 200 from `/_stcore/health`; `/` and `/Market_View` loaded without Traceback/Exception text.
+- [x] Market View rendered latest data date `2026-07-16` in local smoke validation.
+- [x] Streamlit AppTest rendered NSW, Region, and Market Region/`REGION16` views with 0 exceptions.
+- [x] Regression case `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` kept the selector on `MACQUARIE PARK (2113)` from saved state variant `Macquarie Park (2113)` and produced the expected empty filtered result.
+
 ### 2026-07-13 Market View Data Update Validation
 - [x] Source package `RawData/1 page update/20260713.zip` was ingested with `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260713`.
 - [x] DAT extraction directory `RawData/DAT/2026/20260713` contains 127 `.DAT` files.
