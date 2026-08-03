@@ -80,6 +80,60 @@ Canonical update flow:
 Current operational note:
 - monthly mart rebuild is a distinct pipeline concern and may not be included in every manual update-script execution path
 
+### 20260803 Validated Market View Update
+Latest validated package:
+- source package: `RawData/1 page update/20260803.zip`
+- source package size: 226,465 bytes
+- primary update command attempted: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260803`
+- primary wrapper exit result: exit code 1 before extraction because `RawData/DAT/2026/20260803` already existed and was non-empty
+- recovery command for native mart crash: not used; no native crash occurred
+- direct build commands used after ZIP-to-existing-DAT verification:
+  - `.\.venv\Scripts\python.exe refresh_dat_manifest.py --min_year 2026 --max_year 2026`
+  - `.\.venv\Scripts\python.exe build_fact_sales_year.py --min_year 2026 --max_year 2026 --rebuild_if_inputs_newer --overwrite`
+  - `.\.venv\Scripts\python.exe build_mart_daily_rolling.py`
+- DAT extraction directory: `RawData/DAT/2026/20260803`
+- DAT files present: 123
+
+Run note:
+- The ZIP was readable and contained 123 `.DAT` files.
+- Existing DAT files in `RawData/DAT/2026/20260803` matched ZIP DAT names and sizes, so the directory was not cleared with `--force`.
+- Manifest refresh, fact rebuild, and daily rolling mart rebuild completed with exit code 0.
+
+Validated outputs from the 20260803 run:
+- `RawData/manifest/dat_manifest.csv`: 3,759 rows, modified `2026-08-03 17:12:42`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 93,875 rows, latest `contract_date` `2026-07-30`, modified `2026-08-03 17:12:49`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 12,013 rows, latest date `2026-07-30`, modified `2026-08-03 17:12:54`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,619 rows, latest date `2026-07-30`, modified `2026-08-03 17:12:55`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 205,804 rows, latest date `2026-07-24`, modified `2026-08-03 17:12:55`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,895,352 rows, latest date `2026-07-30`, modified `2026-08-03 17:12:56`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,971,409 rows, latest date `2026-07-30`, modified `2026-08-03 17:12:57`
+
+Comparison to 20260727:
+- DAT count: 123 -> 123 for the weekly ZIP batch
+- manifest rows: 3,636 -> 3,759
+- `fact_sales_2026` rows: 91,071 -> 93,875
+- `fact_sales_2026` latest `contract_date`: `2026-07-23` -> `2026-07-30`
+- rows after previous max `contract_date` `2026-07-23`: 20
+- rows on latest `contract_date` `2026-07-30`: 1
+- NSW rolling rows/latest date: 11,999 / `2026-07-23` -> 12,013 / `2026-07-30`
+- Region rolling rows/latest date: 23,591 / `2026-07-23` -> 23,619 / `2026-07-30`
+- Market Region/`REGION16` rolling rows/latest date: 205,735 / `2026-07-23` -> 205,804 / `2026-07-24`
+- Suburb rolling rows/latest date: 9,879,654 / `2026-07-23` -> 9,895,352 / `2026-07-30`
+- Postcode rolling rows/latest date: 3,964,927 / `2026-07-23` -> 3,971,409 / `2026-07-30`
+
+Validation notes:
+- duplicate-row checks returned 0 for manifest, fact, and all five `daily_rolling_*` mart files
+- Region16 lags NSW/Region, but mapped coverage explains the lag: after `2026-07-23`, statewide 2026 fact rows total 20, Region16-mapped rows total 2, and mapped max `contract_date` is `2026-07-24`
+- `.\.venv\Scripts\python.exe -m pytest` was attempted; current `.venv` does not have `pytest` installed
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 8 tests
+- `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `utils/tables.py`, and `tests/test_market_view_area_selection.py`
+- Streamlit AppTest rendered NSW, Region, Market Region/`REGION16`, and `MACQUARIE PARK (2113)` AREA saved-state cases with 0 exceptions
+- local Streamlit server smoke on port `8510` returned 200 from `/_stcore/health`; `/` and `/Market_View` loaded without Traceback/Exception text, and Market View rendered data as of `2026-07-30`
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` remained selected under the saved-state variant `Macquarie Park (2113)` and produced the expected empty filtered result
+- deployment branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- final commit hash is reported in the session handoff after commit creation
+- latest post-`2026-07-23` fact rows are thin and should be treated as provisional registration-lag data
+
 ### 20260727 Validated Market View Update
 Latest validated package:
 - source package: `RawData/1 page update/20260727.zip`
