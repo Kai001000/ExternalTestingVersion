@@ -80,8 +80,58 @@ Canonical update flow:
 Current operational note:
 - monthly mart rebuild is a distinct pipeline concern and may not be included in every manual update-script execution path
 
-### 20260803 Validated Market View Update
+### 20260810 Validated Market View Update
 Latest validated package:
+- source package: `RawData/1 page update/20260810.zip`
+- source package size: 213,986 bytes
+- primary update command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260810`
+- primary wrapper exit result: exit code 0
+- recovery command for native mart crash: not used; no native crash occurred
+- DAT extraction directory: `RawData/DAT/2026/20260810`
+- DAT files extracted: 123
+
+Run note:
+- Pre-run DAT check found `RawData/DAT/2026/20260810` did not exist, so the normal wrapper path was used.
+- The ZIP was readable and contained 123 `.DAT` files.
+- The primary wrapper completed extraction, manifest refresh, fact rebuild, and daily rolling mart rebuild successfully.
+
+Validated outputs from the 20260810 run:
+- `RawData/manifest/dat_manifest.csv`: 3,882 rows, modified `2026-08-10 19:57:38`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 96,466 rows, latest `contract_date` `2026-08-05`, modified `2026-08-10 19:57:41`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 12,025 rows, latest date `2026-08-05`, modified `2026-08-10 19:57:43`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,643 rows, latest date `2026-08-05`, modified `2026-08-10 19:57:44`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 206,199 rows, latest date `2026-08-03`, modified `2026-08-10 19:57:44`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,909,925 rows, latest date `2026-08-05`, modified `2026-08-10 19:57:45`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,976,924 rows, latest date `2026-08-05`, modified `2026-08-10 19:57:46`
+
+Comparison to 20260803:
+- DAT count: 123 -> 123 for the weekly ZIP batch
+- manifest rows: 3,759 -> 3,882
+- `fact_sales_2026` rows: 93,875 -> 96,466
+- `fact_sales_2026` latest `contract_date`: `2026-07-30` -> `2026-08-05`
+- rows after previous max `contract_date` `2026-07-30`: 19
+- rows on latest `contract_date` `2026-08-05`: 1
+- NSW rolling rows/latest date: 12,013 / `2026-07-30` -> 12,025 / `2026-08-05`
+- Region rolling rows/latest date: 23,619 / `2026-07-30` -> 23,643 / `2026-08-05`
+- Market Region/`REGION16` rolling rows/latest date: 205,804 / `2026-07-24` -> 206,199 / `2026-08-03`
+- Suburb rolling rows/latest date: 9,895,352 / `2026-07-30` -> 9,909,925 / `2026-08-05`
+- Postcode rolling rows/latest date: 3,971,409 / `2026-07-30` -> 3,976,924 / `2026-08-05`
+
+Validation notes:
+- duplicate-row checks returned 0 for manifest, fact, and all five `daily_rolling_*` mart files
+- Region16 lags NSW/Region, but mapped coverage explains the lag: after `2026-07-24`, statewide 2026 fact rows total 60, Region16-mapped rows total 12, and mapped max `contract_date` is `2026-08-03`
+- `.\.venv\Scripts\python.exe -m pytest` was attempted; current `.venv` does not have `pytest` installed
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 8 tests
+- `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `utils/tables.py`, and `tests/test_market_view_area_selection.py`
+- Streamlit AppTest rendered Market View with 0 exceptions, latest date `2026-08-05` visible, and selector value `MACQUARIE PARK (2113)`
+- local Streamlit server smoke on port `8510` returned 200 from `/_stcore/health`; `/` and `/Market_View` returned 200 with no Traceback/Exception in logs
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` remained selected under the saved-state variant `Macquarie Park (2113)` and produced the expected empty filtered result
+- deployment branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- final commit hash is reported in the session handoff after commit creation
+- latest post-`2026-07-30` fact rows are very thin and should be treated as provisional registration-lag data
+
+### 20260803 Validated Market View Update
+Previous validated package:
 - source package: `RawData/1 page update/20260803.zip`
 - source package size: 226,465 bytes
 - primary update command attempted: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260803`
