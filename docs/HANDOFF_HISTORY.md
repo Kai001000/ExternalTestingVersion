@@ -13,6 +13,80 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-08-24 - Market View Weekly Data Update 20260824
+
+Context: weekly Market View data refresh | Streamlit deploy branch data sync | latest-edge density and Market Region coverage-lag check
+
+Source and command:
+- Source package: `RawData/1 page update/20260824.zip`
+- Source package size: 250,895 bytes
+- Primary command: `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260824`
+- DAT destination: `RawData/DAT/2026/20260824`
+- DAT files extracted: 127
+
+Run note:
+- Pre-run DAT check found `RawData/DAT/2026/20260824` did not exist, so the normal wrapper path was used.
+- The ZIP was readable, `bad_member` was `None`, and it contained 127 `.DAT` files.
+- The primary wrapper completed extraction, manifest refresh, `fact_sales_2026` rebuild, and daily rolling mart rebuild with exit code 0.
+- No Python traceback, native crash, or native-crash recovery command occurred.
+- Recovery command `.\.venv\Scripts\python.exe -X faulthandler build_mart_daily_rolling.py` was not needed.
+
+Validated outputs:
+- `RawData/manifest/dat_manifest.csv`: 4,130 rows, modified `2026-08-24 19:58:53`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 102,058 rows, latest `contract_date` `2026-08-20`, modified `2026-08-24 19:58:57`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 12,055 rows, latest date `2026-08-20`, modified `2026-08-24 19:58:58`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,703 rows, latest date `2026-08-20`, modified `2026-08-24 19:58:59`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 206,847 rows, latest date `2026-08-19`, modified `2026-08-24 19:59:00`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,940,112 rows, latest date `2026-08-20`, modified `2026-08-24 19:59:01`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 3,989,462 rows, latest date `2026-08-20`, modified `2026-08-24 19:59:02`
+
+Comparison to 20260817:
+- DAT count changed from 121 to 127 for the weekly ZIP batch.
+- Manifest rows increased from 4,003 to 4,130.
+- `fact_sales_2026` rows increased from 99,034 to 102,058, with 19 rows after previous max `contract_date` `2026-08-13`.
+- Latest `contract_date` advanced from `2026-08-13` to `2026-08-20`; latest day contains 2 fact rows.
+- NSW rolling rows increased from 12,041 to 12,055; latest date advanced from `2026-08-13` to `2026-08-20`.
+- Region rolling rows increased from 23,675 to 23,703; latest date advanced from `2026-08-13` to `2026-08-20`.
+- Market Region/`REGION16` rolling rows increased from 206,528 to 206,847; latest date advanced from `2026-08-11` to `2026-08-19`.
+- Suburb rolling rows increased from 9,924,808 to 9,940,112; latest date advanced from `2026-08-13` to `2026-08-20`.
+- Postcode rolling rows increased from 3,983,089 to 3,989,462; latest date advanced from `2026-08-13` to `2026-08-20`.
+- Duplicate-row checks returned 0 for manifest, fact, and all five `daily_rolling_*` mart files.
+- Most of the 3,024 added 2026 fact rows were historical backfill at or before `2026-08-13`; only 19 rows were after the previous max date.
+- Latest post-`2026-08-13` fact rows are very thin; treat newest days as provisional registration-lag data rather than a stable trend signal.
+
+Latest-edge density:
+- `2026-08-12`: 12 fact rows
+- `2026-08-13`: 7 fact rows
+- `2026-08-14`: 8 fact rows
+- `2026-08-17`: 4 fact rows
+- `2026-08-18`: 3 fact rows
+- `2026-08-19`: 2 fact rows
+- `2026-08-20`: 2 fact rows
+
+Region16 check:
+- Region16 still lags NSW/Region in max mart date by one day: Region16 is `2026-08-19`, while NSW and Region are `2026-08-20`.
+- Statewide fact rows after `2026-08-11`: 38 total after mart filters.
+- Region16-mapped fact rows after `2026-08-11`: 5.
+- Region16-mapped fact max `contract_date`: `2026-08-19`.
+- Region16 mart max date matches the mapped fact max date, and there are 0 Region16-mapped fact rows after `2026-08-19`, so the lag is explained by mapped coverage and not by a stale mart build.
+
+Validation:
+- `.\.venv\Scripts\python.exe -m pytest` was attempted but the `.venv` environment does not have `pytest` installed.
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 8 tests.
+- `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `utils/tables.py`, and `tests/test_market_view_area_selection.py`.
+- Local Streamlit server smoke used `home.py` on port `8510`; health endpoint returned 200, `/` returned 200, `/Market_View` returned 200, Playwright rendered `/Market_View` with latest date `2026-08-20`, and the server process was stopped with port `8510` released.
+- The page smoke had no Traceback/Exception text. It emitted existing pandas `FutureWarning` and Streamlit `use_container_width` deprecation warnings.
+- No project-provided Streamlit AppTest or Playwright smoke script was present. A temporary AppTest probe against `pages/1_Market_View.py` timed out after 60 seconds, so it was not used as the pass/fail smoke result.
+- Real-data selector validation confirmed saved state `Macquarie Park (2113)` is coerced to existing option `MACQUARIE PARK (2113)`.
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` kept the selector on `MACQUARIE PARK (2113)` and produced the expected empty filtered result.
+
+Deployment sync:
+- Branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- Active deploy data files are the tracked `Processed/fact_sales/`, `Processed/mart_daily_rolling/`, and `RawData/manifest/dat_manifest.csv` artifacts.
+- `data/public_market_view/` remains a legacy snapshot layer and was not updated for this run.
+- `RawData/1 page update/20260824.zip`, `RawData/DAT/2026/20260824/`, weekly source zip files, virtualenvs, cache/temp files, and unrelated dirty local files were not staged for deployment.
+- Final commit hash is reported in the session handoff after commit creation.
+
 ### 2026-08-17 - Market View Weekly Data Update 20260817
 
 Context: weekly Market View data refresh | Streamlit deploy branch data sync | selector empty-state regression check

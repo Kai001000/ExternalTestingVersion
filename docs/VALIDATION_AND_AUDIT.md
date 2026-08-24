@@ -76,6 +76,34 @@ For each validated path:
 - [ ] `MACQUARIE PARK` / postcode `2113` remains mapped to `Ryde / Northern Suburbs`
 - [ ] `tests/test_market_view_area_selection.py` passes after selector or area-filter changes
 
+### 2026-08-24 Market View Data Update Validation
+- [x] Source package `RawData/1 page update/20260824.zip` was found, was readable, and was 250,895 bytes.
+- [x] ZIP archive validation returned `bad_member: None` and found 127 `.DAT` entries.
+- [x] Pre-run DAT check found `RawData/DAT/2026/20260824` did not exist, so the normal wrapper path was used.
+- [x] The primary wrapper command `.\.venv\Scripts\python.exe scripts\update_market_view_from_zip.py --date 20260824` completed with exit code 0.
+- [x] Recovery command `.\.venv\Scripts\python.exe -X faulthandler build_mart_daily_rolling.py` was not needed; no native crash occurred.
+- [x] DAT extraction directory `RawData/DAT/2026/20260824` contains 127 `.DAT` files.
+- [x] `RawData/manifest/dat_manifest.csv` refreshed to 4,130 rows.
+- [x] `Processed/fact_sales/fact_sales_2026.parquet` refreshed to 102,058 rows with latest `contract_date` `2026-08-20`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_nsw.parquet` refreshed to 12,055 rows with latest date `2026-08-20`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_region.parquet` refreshed to 23,703 rows with latest date `2026-08-20`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_region16.parquet` refreshed to 206,847 rows with latest date `2026-08-19`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_suburb.parquet` refreshed to 9,940,112 rows with latest date `2026-08-20`.
+- [x] `Processed/mart_daily_rolling/daily_rolling_postcode.parquet` refreshed to 3,989,462 rows with latest date `2026-08-20`.
+- [x] Compared with 20260817: manifest rows advanced 4,003 -> 4,130; `fact_sales_2026` rows advanced 99,034 -> 102,058; NSW/Region/Suburb/Postcode max dates advanced to `2026-08-20`; Market Region/`REGION16` max date advanced to `2026-08-19`.
+- [x] `fact_sales_2026` contains 19 rows after previous max `contract_date` `2026-08-13`; latest `contract_date` `2026-08-20` contains 2 rows, so newest days remain provisional registration-lag data.
+- [x] Latest seven fact contract-date row counts were checked: `2026-08-12` 12, `2026-08-13` 7, `2026-08-14` 8, `2026-08-17` 4, `2026-08-18` 3, `2026-08-19` 2, `2026-08-20` 2.
+- [x] Duplicate-row checks returned 0 for manifest, fact, and all five `daily_rolling_*` mart files.
+- [x] Region16 lag check found mapped coverage lag: after `2026-08-11`, statewide fact rows total 38, Region16-mapped rows total 5, mapped max `contract_date` is `2026-08-19`, Region16 mart max date is `2026-08-19`, and Region16-mapped fact rows after the Region16 mart max date are 0.
+- [x] `.\.venv\Scripts\python.exe -m pytest` was attempted; current `.venv` does not have `pytest` installed.
+- [x] `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 8 tests.
+- [x] `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `utils/tables.py`, and `tests/test_market_view_area_selection.py`.
+- [x] Runtime data validation confirmed NSW, Region, Market Region/`REGION16`, Suburb, and Postcode marts load and contain refreshed dates.
+- [x] Local Streamlit server smoke on port `8510` returned 200 from `/_stcore/health`; `/` and `/Market_View` returned 200; Playwright rendered `/Market_View` with latest date `2026-08-20` and no Traceback/Exception text; the server process was stopped and port `8510` was released.
+- [x] No project-provided Streamlit AppTest or Playwright smoke script was present. A temporary AppTest probe timed out after 60 seconds and was not used as the pass/fail result.
+- [x] Market View latest loaded data date is `2026-08-20`.
+- [x] Regression case `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` kept the selector on `MACQUARIE PARK (2113)` from saved state variant `Macquarie Park (2113)` and produced the expected empty filtered result.
+
 ### 2026-08-17 Market View Data Update Validation
 - [x] Source package `RawData/1 page update/20260817.zip` was found, was readable, and was 212,542 bytes.
 - [x] Pre-run DAT check found `RawData/DAT/2026/20260817` did not exist, so the normal wrapper path was used.
