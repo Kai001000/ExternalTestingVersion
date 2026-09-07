@@ -13,6 +13,87 @@
 
 ## Reverse-Chronological Session Record
 
+### 2026-09-07 - Market View Weekly Data Update 20260907
+
+Context: weekly Market View data refresh | Streamlit deploy branch data sync | verified existing-DAT manual path | latest-edge density and Market Region coverage check
+
+Source and command:
+- Source package: `RawData/1 page update/20260907.zip`
+- Source package size: 264,926 bytes
+- ZIP archive validation returned `bad_member: None` and found 123 `.DAT` entries.
+- DAT destination: `RawData/DAT/2026/20260907`
+- DAT files present before update: 123
+- DAT files used for rebuild: 123
+- The pre-existing DAT directory matched the ZIP by `.DAT` count, filename set, file size, and SHA256.
+
+Run note:
+- Pre-run DAT check found `RawData/DAT/2026/20260907` already existed and was non-empty, so the normal wrapper was not used for extraction.
+- Verified existing-DAT manual path was used after ZIP/DAT equivalence was confirmed.
+- Commands run: `.\.venv\Scripts\python.exe refresh_dat_manifest.py --min_year 2026 --max_year 2026`; `.\.venv\Scripts\python.exe build_fact_sales_year.py --overwrite --min_year 2026 --max_year 2026`; `.\.venv\Scripts\python.exe build_mart_daily_rolling.py`.
+- An initial unscoped manifest refresh was discarded because it scanned all years and produced 78,740 rows; the final committed manifest was rebuilt with the same 2026 scope used by the wrapper path.
+- The mart build completed with exit code 0.
+- No Python traceback, native crash, or native-crash recovery command occurred.
+- Recovery command `.\.venv\Scripts\python.exe -X faulthandler build_mart_daily_rolling.py` was not needed.
+
+Validated outputs:
+- `RawData/manifest/dat_manifest.csv`: 4,378 rows, modified `2026-09-07 18:41:07`
+- `Processed/fact_sales/fact_sales_2026.parquet`: 110,884 rows, latest `contract_date` `2026-09-03`, modified `2026-09-07 18:41:22`
+- `Processed/mart_daily_rolling/daily_rolling_nsw.parquet`: 12,083 rows, latest date `2026-09-03`, modified `2026-09-07 18:41:32`
+- `Processed/mart_daily_rolling/daily_rolling_region.parquet`: 23,759 rows, latest date `2026-09-03`, modified `2026-09-07 18:41:32`
+- `Processed/mart_daily_rolling/daily_rolling_region16.parquet`: 207,436 rows, latest date `2026-09-03`, modified `2026-09-07 18:41:33`
+- `Processed/mart_daily_rolling/daily_rolling_suburb.parquet`: 9,973,382 rows, latest date `2026-09-03`, modified `2026-09-07 18:41:34`
+- `Processed/mart_daily_rolling/daily_rolling_postcode.parquet`: 4,001,934 rows, latest date `2026-09-03`, modified `2026-09-07 18:41:35`
+
+Comparison to 20260831:
+- DAT count changed from 125 to 123 for the weekly ZIP batch.
+- Manifest rows increased from 4,255 to 4,378.
+- `fact_sales_2026` rows increased from 107,539 to 110,884, with 27 rows after previous max `contract_date` `2026-08-27`.
+- The total 2026 fact row increase was 3,345 rows: 27 rows on new dates after `2026-08-27` and 3,318 rows of historical backfill at or before `2026-08-27` (99.19% historical backfill).
+- Latest `contract_date` advanced from `2026-08-27` to `2026-09-03`; latest day contains 4 fact rows.
+- NSW rolling rows increased from 12,069 to 12,083; latest date advanced from `2026-08-27` to `2026-09-03`.
+- Region rolling rows increased from 23,731 to 23,759; latest date advanced from `2026-08-27` to `2026-09-03`.
+- Market Region/`REGION16` rolling rows increased from 207,168 to 207,436; latest date advanced from `2026-08-27` to `2026-09-03`.
+- Suburb rolling rows increased from 9,956,663 to 9,973,382; latest date advanced from `2026-08-27` to `2026-09-03`.
+- Postcode rolling rows increased from 3,995,566 to 4,001,934; latest date advanced from `2026-08-27` to `2026-09-03`.
+- Duplicate-row checks returned 0 for manifest, fact, and all five `daily_rolling_*` mart files.
+- There were 0 fact or mart dates later than the batch date `2026-09-07`.
+- The update is predominantly historical registration backfill; the newest contract-date tail remains provisional registration-lag data.
+
+Latest-edge density:
+- `2026-08-24`: 9 fact rows
+- `2026-08-25`: 17 fact rows
+- `2026-08-26`: 8 fact rows
+- `2026-08-27`: 10 fact rows
+- `2026-08-28`: 9 fact rows
+- `2026-08-30`: 1 fact row
+- `2026-08-31`: 8 fact rows
+- `2026-09-01`: 4 fact rows
+- `2026-09-02`: 1 fact row
+- `2026-09-03`: 4 fact rows
+
+Region16 check:
+- Region16 does not lag NSW/Region in max mart date for this run; all three max dates are `2026-09-03`.
+- Statewide fact rows after `2026-08-27`: 27.
+- Region16-mapped fact rows after `2026-08-27`: 9.
+- Region16-mapped fact max `contract_date`: `2026-09-03`.
+- Region16 mart max date matches the mapped fact max date, and there are 0 Region16-mapped fact rows after `2026-09-03`, so there is no stale mart-build indication.
+
+Validation:
+- `.\.venv\Scripts\python.exe -m pytest` was attempted but the `.venv` environment does not have `pytest` installed.
+- `.\.venv\Scripts\python.exe -m unittest tests.test_market_view_area_selection` passed: 8 tests.
+- `py_compile` passed for `home.py`, `pages/1_Market_View.py`, `utils/data.py`, `utils/i18n.py`, `utils/market_view_area.py`, `utils/tables.py`, and `tests/test_market_view_area_selection.py`.
+- Local Streamlit server smoke used `home.py` on port `8510`; health endpoint returned 200, `/` returned 200, `/Market_View` returned 200, Playwright rendered `/Market_View` with latest date `2026-09-03`, and the server process was stopped with port `8510` released.
+- The Playwright page smoke had no Traceback/Exception text.
+- Runtime data validation confirmed NSW, Region, Market Region/`REGION16`, Suburb, and Postcode marts load and contain refreshed dates.
+- Real-data selector validation confirmed saved state `Macquarie Park (2113)` is coerced to existing option `MACQUARIE PARK (2113)`.
+- `MACQUARIE PARK (2113)` + `HOUSE` + `1 Year` kept the selector on `MACQUARIE PARK (2113)` and did not reset; direct data validation found 176 suburb rows and 4,343 postcode `2113` rows for `HOUSE`.
+
+Deployment sync:
+- Branch: `deploy/streamlit-cloud-safe-2026-03-29`
+- Active deploy data files are the tracked `Processed/fact_sales/`, `Processed/mart_daily_rolling/`, and `RawData/manifest/dat_manifest.csv` artifacts.
+- `RawData/1 page update/20260907.zip`, `RawData/DAT/2026/20260907/`, weekly source zip files, virtualenvs, research folders, cache/temp/log files, and unrelated dirty local files were not staged for deployment.
+- Final commit hash is reported in the session handoff after commit creation.
+
 ### 2026-08-31 - Market View Weekly Data Update 20260831
 
 Context: weekly Market View data refresh | Streamlit deploy branch data sync | latest-edge density and Market Region coverage check
